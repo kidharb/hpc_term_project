@@ -56,75 +56,39 @@ texture<float, 2, cudaReadModeElementType> tex;
 // Auto-Verification Code
 bool testResult = true;
 
-int edge_detect_kernel_vert[3][3] = {
-                                      {-1, 0, 1},
-                                      {-2, 0, 2},
-                                      {-1, 0, 1},
-                                    };
+int edge_detect_kernel[3][3] = {
+                                 {0, -1, 0},
+                                 {-1, 5, -1},
+                                 {0, -1, 0},
+                                };
 
-int edge_detect_kernel_hor[3][3] = {
-                                      {-1, -2, -1},
-                                      {0, 0, 0},
-                                      {1, 2, 1},
-                                    };
+void generateKernel(int *kernel, int width, int height)
+{
 
+}
 ////////////////////////////////////////////////////////////////////////////////
 //! Serial convolution on CPU
 ////////////////////////////////////////////////////////////////////////////////
-void serialTransformCPU(float *inputData,
+void serialConvolutionCPU(float *inputData,
                                 int width,
                                 int height,
                                 float *outputData)
 {
-#define DEBUG
-#ifdef DEBUG
-  // Before
-  printf("Before edge detect\n");
-  for (int x = 0; x < 3; x++)
-  {
-    for (int y = 0; y < 3; y++)
-    {
-      printf("%f ",inputData[x*width + y]);
-    }
-    printf("\n");
-  }
-  printf("\n");
-#endif
-
   for (int i = 0; i < (width - 1); i++)
   {
     for (int j = 0; j < (height - 1); j++)
     {
-      float dx =0.0;
-      float dy =0.0;
+      float sum =0.0;
       for (int x = 0; x < 3; x++)
       {
         for (int y = 0; y < 3; y++)
         {
-          /*printf("%f * %d\n",inputData[(x + i)*width + (y + j)],edge_detect_kernel[x][y]);*/
-          dx += inputData[(x + i)*width + (y + j)] * edge_detect_kernel_vert[x][y]; 
-          dy += inputData[(x + i)*width + (y + j)] * edge_detect_kernel_hor[x][y]; 
-      //printf("%f ",inputData[i*width + j]);
+          sum += inputData[(x + i)*width + (y + j)] * edge_detect_kernel[x][y]; 
         }
-        /*printf("\n");*/
       }
-      /*printf("\n%f \n",sum);*/
-      outputData[(i + 1)*width + (j + 1)] = sqrt((dx*dx) + (dy*dy));
+      outputData[(i + 1)*width + (j + 1)] = sum;
     }
   }
-
-#ifdef DEBUG
-  //After
-  printf("\nAfter edge detect\n");
-  for (int x = 0; x < 3; x++)
-  {
-    for (int y = 0; y < 3; y++)
-    {
-      printf("%f ",outputData[x*width + y]);
-    }
-    printf("\n");
-  }
-#endif
 }
 
 
@@ -274,7 +238,7 @@ void runTest(int argc, char **argv)
 
     // Run the serial convolution on the CPU
     float *hSerialDataOut = (float *) malloc(size);
-    serialTransformCPU(hData, width, height, hSerialDataOut);
+    serialConvolutionCPU(hData, width, height, hSerialDataOut);
     sdkSavePGM("./data/edge_detect.pgm", hSerialDataOut, width, height);
 
     dim3 dimBlock(8, 8, 1);
