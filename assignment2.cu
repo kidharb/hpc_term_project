@@ -69,9 +69,12 @@ int edge_detect_kernel[3][3] = {
                                  {-1, 0, 1},
                                 };
 
+////////////////////////////////////////////////////////////////////////////////
+//! Generate the Kernel
+////////////////////////////////////////////////////////////////////////////////
 int generateKernel(float *kernel, int dim, kernel_type type)
 {
-  // The matrix has to be off sized so if we take the integer division
+  // The matrix has to be odd sized so if we take the integer division
   // we get the center of the matrix. We use this later for the SHARPEN
   // mask, ie set the center of the matrix to +9
   int center = dim / 2;
@@ -79,16 +82,20 @@ int generateKernel(float *kernel, int dim, kernel_type type)
   {
     for (int j = 0; j < dim; j++)
     {
+      // For SHARPEN, all values are -1 except the center
       if (SHARPEN == type)
       {
         kernel[i*dim + j] = -1; 
       }
+      // For AVERAGE, all values are 1/9
       else if (AVERAGE == type)
       {
         kernel[i*dim + j] = (float)1/9; 
       }
+      // For EDGE, we have a 3x3 kernel which is read from above
       else if (EDGE == type)
       {
+        // Dimensions has to be 3x3 otherwise return
         if (3 == dim)
         {
           kernel[i*dim + j] = edge_detect_kernel[i][j]; 
@@ -101,6 +108,7 @@ int generateKernel(float *kernel, int dim, kernel_type type)
     }
   }
 
+  // Set the center of the SHARPEN kernel to +9
   if (SHARPEN == type)
     kernel[center*dim + center] = 9;
 
@@ -114,6 +122,58 @@ int generateKernel(float *kernel, int dim, kernel_type type)
     printf("\n");
   }
 #endif
+<<<<<<< HEAD
+=======
+  return 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//! Pad the input Matrix
+////////////////////////////////////////////////////////////////////////////////
+int padInputData(float *hData, int width, int height, float *hPaddedData, int dim)
+{
+  int pad_size = dim / 2; 
+
+  // Resize the new matrix 2x the pad_size, once for top and bottom and once for left and right
+  width += 2 * pad_size;
+  height += 2 * pad_size;
+
+  /*printf("width = %d, height = %d\n",width,height);*/
+  for (int i = 0; i < width; i++)
+  {
+    for (int j = 0; j < height; j++)
+    {
+      // Set the new matrix to 0.0 then update it with the input matrix if we are in the middle
+      hPaddedData[i*width + j] = 0;
+
+      // Only fill in matrix if we are in the middleware of the matrix, ie (row,col) ==> (>= pad_size & >= pad_size) 
+      // or (row,col) ==> (< width-pad_size & < height-pad_size)
+      if (((i >= pad_size ) && (j >= pad_size)) && ((i < (width - pad_size)) && ((j < (height - pad_size)))))
+      {
+        hPaddedData[i*width + j] = hData[(i - pad_size)*width + (j - pad_size)];
+      }
+    }
+  }
+
+#ifdef DEBUG1
+  for (int i = 497; i < 512; i++)
+  {
+    for (int j = 497; j < 512; j++)
+    {
+      printf("%f ",hData[i*width  + j] );
+    }
+    printf("\n");
+  }
+    printf("\n");
+  for (int i = 499; i < width; i++)
+  {
+    for (int j = 499; j < height; j++)
+    {
+      printf("%f ",hPaddedData[i*width + j] );
+    }
+    printf("\n");
+  }
+#endif
   return 1;
 }
 ////////////////////////////////////////////////////////////////////////////////
@@ -122,16 +182,20 @@ int generateKernel(float *kernel, int dim, kernel_type type)
 void serialConvolutionCPU(float *inputData,
                                 int width,
                                 int height,
+                                float* kernel,
+                                int dim,
                                 float *outputData)
 {
+  // loop over the input image
   for (int i = 0; i < (width - 1); i++)
   {
     for (int j = 0; j < (height - 1); j++)
     {
       float sum =0.0;
-      for (int x = 0; x < 3; x++)
+      // loop over the kernel
+      for (int x = 0; x < dim; x++)
       {
-        for (int y = 0; y < 3; y++)
+        for (int y = 0; y < dim; y++)
         {
           sum += inputData[(x + i)*width + (y + j)] * edge_detect_kernel[x][y]; 
         }
@@ -285,14 +349,25 @@ void runTest(int argc, char **argv)
     // Bind the array to the texture
     checkCudaErrors(cudaBindTextureToArray(tex, cuArray, channelDesc));
 
-    int dim = 3;
-    kernel_type type = EDGE; 
+    // Generate Kernel
+    int dim = 7;
+    kernel_type type = SHARPEN; 
     float *kernel = (float *)malloc(dim*dim * sizeof(int));
     generateKernel(kernel, dim, type);
+
+    // Pad matrix according to the dimension of the kernel. For example, if
+    // the kernel dimension is 3, we need to pad the input data by 1 row above 
+    // and below and 1 coloumn before and after. If the dimension of the kernel
+    // is 5, then we need to pad by 2, 7 --> pad by 3 and so on.
+    unsigned long paddedsize = (width + 2*(dim/2)) * (height + 2*(dim/2)) * sizeof(float);
+    float *hPaddedData = (float *) malloc(paddedsize);
+    padInputData(hData, width, height, hPaddedData, dim);
+    
     // Run the serial convolution on the CPU
     float *hSerialDataOut = (float *) malloc(size);
-    serialConvolutionCPU(hData, width, height, hSerialDataOut);
+    serialConvolutionCPU(hData, width, height, kernel, dim, hSerialDataOut);
 
+    sdkSavePGM("./data/conv_output.pgm", hSerialDataOut, width, height);
     dim3 dimBlock(8, 8, 1);
     dim3 dimGrid(width / dimBlock.x, height / dimBlock.y, 1);
 
@@ -365,5 +440,6 @@ void runTest(int argc, char **argv)
     free(refPath);
     free(hSerialDataOut);
     free(kernel);
+    free(hPaddedData);
 }
 
