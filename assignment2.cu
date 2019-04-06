@@ -104,6 +104,7 @@ int generateKernel(float *kernel, int dim, kernel_type type)
   if (SHARPEN == type)
     kernel[center*dim + center] = 9;
 
+#ifdef DEBUG
   for (int i = 0; i < dim; i++)
   {
     for (int j = 0; j < dim; j++)
@@ -112,6 +113,7 @@ int generateKernel(float *kernel, int dim, kernel_type type)
     }
     printf("\n");
   }
+#endif
   return 1;
 }
 ////////////////////////////////////////////////////////////////////////////////
