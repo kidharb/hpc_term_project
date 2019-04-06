@@ -40,6 +40,13 @@
 
 #define MAX_EPSILON_ERROR 5e-3f
 
+enum kernel_type
+{
+  SHARPEN = 0,
+  AVERAGE = 1,
+  EDGE    = 2
+};
+
 // Define the files that are to be save and the reference images for validation
 const char *imageFilename = "lena_bw.pgm";
 const char *refFilename   = "ref_rotated.pgm";
@@ -57,14 +64,55 @@ texture<float, 2, cudaReadModeElementType> tex;
 bool testResult = true;
 
 int edge_detect_kernel[3][3] = {
-                                 {0, -1, 0},
-                                 {-1, 5, -1},
-                                 {0, -1, 0},
+                                 {-1, 0, 1},
+                                 {-2, 0, 2},
+                                 {-1, 0, 1},
                                 };
 
-void generateKernel(int *kernel, int width, int height)
+int generateKernel(float *kernel, int dim, kernel_type type)
 {
+  // The matrix has to be off sized so if we take the integer division
+  // we get the center of the matrix. We use this later for the SHARPEN
+  // mask, ie set the center of the matrix to +9
+  int center = dim / 2;
+  for (int i = 0; i < dim; i++)
+  {
+    for (int j = 0; j < dim; j++)
+    {
+      if (SHARPEN == type)
+      {
+        kernel[i*dim + j] = -1; 
+      }
+      else if (AVERAGE == type)
+      {
+        kernel[i*dim + j] = (float)1/9; 
+      }
+      else if (EDGE == type)
+      {
+        if (3 == dim)
+        {
+          kernel[i*dim + j] = edge_detect_kernel[i][j]; 
+        }
+        else
+        {
+          return 0;
+        }
+      }
+    }
+  }
 
+  if (SHARPEN == type)
+    kernel[center*dim + center] = 9;
+
+  for (int i = 0; i < dim; i++)
+  {
+    for (int j = 0; j < dim; j++)
+    {
+      printf("%f ",kernel[i*dim + j]);
+    }
+    printf("\n");
+  }
+  return 1;
 }
 ////////////////////////////////////////////////////////////////////////////////
 //! Serial convolution on CPU
@@ -235,11 +283,13 @@ void runTest(int argc, char **argv)
     // Bind the array to the texture
     checkCudaErrors(cudaBindTextureToArray(tex, cuArray, channelDesc));
 
-
+    int dim = 3;
+    kernel_type type = EDGE; 
+    float *kernel = (float *)malloc(dim*dim * sizeof(int));
+    generateKernel(kernel, dim, type);
     // Run the serial convolution on the CPU
     float *hSerialDataOut = (float *) malloc(size);
     serialConvolutionCPU(hData, width, height, hSerialDataOut);
-    sdkSavePGM("./data/edge_detect.pgm", hSerialDataOut, width, height);
 
     dim3 dimBlock(8, 8, 1);
     dim3 dimGrid(width / dimBlock.x, height / dimBlock.y, 1);
@@ -311,5 +361,7 @@ void runTest(int argc, char **argv)
     checkCudaErrors(cudaFreeArray(cuArray));
     free(imagePath);
     free(refPath);
+    free(hSerialDataOut);
+    free(kernel);
 }
 
