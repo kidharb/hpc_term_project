@@ -122,8 +122,6 @@ int generateKernel(float *kernel, int dim, kernel_type type)
     printf("\n");
   }
 #endif
-<<<<<<< HEAD
-=======
   return 1;
 }
 
