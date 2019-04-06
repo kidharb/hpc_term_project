@@ -149,24 +149,23 @@ int padInputData(float *hData, int width, int height, float *hPaddedData, int ke
     }
   }
 
-#define DEBUG1
 #ifdef DEBUG1
-  for (int i = 0; i < 10; i++)
-  /*for (int i = 497; i < 512; i++)*/
+  /*for (int i = 0; i < 10; i++)*/
+  for (int i = 497; i < 512; i++)
   {
-    for (int j = 0; j < 10; j++)
-    /*for (int j = 497; j < 512; j++)*/
+    /*for (int j = 0; j < 10; j++)*/
+    for (int j = 497; j < 512; j++)
     {
       printf("%f ",hData[i*512 + j]);
     }
     printf("\n");
   }
     printf("\n");
-  for (int i = 0; i < 10; i++)
-  /*for (int i = 499; i < width; i++)*/
+  /*for (int i = 0; i < 10; i++)*/
+  for (int i = 499; i < width; i++)
   {
-    for (int j = 0; j < 10; j++)
-    /*for (int j = 499; j < height; j++)*/
+    /*for (int j = 0; j < 10; j++)*/
+    for (int j = 499; j < height; j++)
     {
       printf("%f ",hPaddedData[i*width + j]);
     }
@@ -182,25 +181,25 @@ void serialConvolutionCPU(float *inputData,
                                 int width,
                                 int height,
                                 float* kernel,
-                                int dim,
+                                int kernel_dim,
                                 float *outputData)
 {
   // loop over the input image
-  for (int i = 0; i < (width - 1); i++)
+  for (int i = 0; i < width; i++)
   {
-    for (int j = 0; j < (height - 1); j++)
+    for (int j = 0; j < height; j++)
     {
       float sum =0.0;
       // loop over the kernel
-      for (int x = 0; x < dim; x++)
+      for (int x = 0; x < kernel_dim; x++)
       {
-        for (int y = 0; y < dim; y++)
+        for (int y = 0; y < kernel_dim; y++)
         {
           // Do the convolution
-          sum += inputData[(x + i)*width + (y + j)] * edge_detect_kernel[x][y]; 
+          sum += inputData[(x + i)*width + (y + j)] * kernel[(x * kernel_dim) + y]; 
         }
       }
-      outputData[(i + 1)*width + (j + 1)] = sum;
+      outputData[(i * width) + j] = sum;
     }
   }
 }
@@ -282,7 +281,7 @@ void runTest(int argc, char **argv)
     printf("Loaded '%s', %d x %d pixels took %d bytes\n", imageFilename, width, height, size);
 
     // Generate Kernel
-    int kernel_dim = 5;
+    int kernel_dim = 3;
     kernel_type type = SHARPEN; 
     float *kernel = (float *)malloc(kernel_dim*kernel_dim * sizeof(int));
     generateKernel(kernel, kernel_dim, type);
