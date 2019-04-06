@@ -49,25 +49,21 @@ enum kernel_type
 
 // Define the files that are to be save and the reference images for validation
 const char *imageFilename = "lena_bw.pgm";
+// Define the files that are to be save ";
 const char *refFilename   = "ref_rotated.pgm";
 
 const char *sampleName = "simpleTexture";
 
 ////////////////////////////////////////////////////////////////////////////////
 // Constants
-const float angle = 0.5f;        // angle to rotate image by (in radians)
-
-// Texture reference for 2D float texture
-texture<float, 2, cudaReadModeElementType> tex;
+const int edge_detect_kernel[3][3] = {
+                                       {-1, 0, 1},
+                                       {-2, 0, 2},
+                                       {-1, 0, 1},
+                                     };
 
 // Auto-Verification Code
 bool testResult = true;
-
-int edge_detect_kernel[3][3] = {
-                                 {-1, 0, 1},
-                                 {-2, 0, 2},
-                                 {-1, 0, 1},
-                                };
 
 ////////////////////////////////////////////////////////////////////////////////
 //! Generate the Kernel
@@ -128,46 +124,50 @@ int generateKernel(float *kernel, int dim, kernel_type type)
 ////////////////////////////////////////////////////////////////////////////////
 //! Pad the input Matrix
 ////////////////////////////////////////////////////////////////////////////////
-int padInputData(float *hData, int width, int height, float *hPaddedData, int dim)
+int padInputData(float *hData, int width, int height, float *hPaddedData, int kernel_dim)
 {
-  int pad_size = dim / 2; 
+  int pad_size = kernel_dim / 2; 
 
-  // Resize the new matrix 2x the pad_size, once for top and bottom and once for left and right
+  // Resize the new matrix to 2x the pad_size, once for top and bottom and once for left and right
   width += 2 * pad_size;
   height += 2 * pad_size;
 
-  /*printf("width = %d, height = %d\n",width,height);*/
   for (int i = 0; i < width; i++)
   {
     for (int j = 0; j < height; j++)
     {
-      // Set the new matrix to 0.0 then update it with the input matrix if we are in the middle
+      // Set all elements in the new padded matrix to 0.0 then update it with the input matrix if we are outside of
+      // the padding area
       hPaddedData[i*width + j] = 0;
 
-      // Only fill in matrix if we are in the middleware of the matrix, ie (row,col) ==> (>= pad_size & >= pad_size) 
-      // or (row,col) ==> (< width-pad_size & < height-pad_size)
-      if (((i >= pad_size ) && (j >= pad_size)) && ((i < (width - pad_size)) && ((j < (height - pad_size)))))
+      // Only fill in matrix if we are in the middleware of the matrix, ie if (row >= pad_size & row >= pad_size) 
+      // & (row < width-pad_size & row < height-pad_size)
+      if ((i >= pad_size) && (j >= pad_size) && (i < (width - pad_size)) && (j < (height - pad_size)))
       {
-        hPaddedData[i*width + j] = hData[(i - pad_size)*width + (j - pad_size)];
+        hPaddedData[i*width + j] = hData[i*(width - 2*pad_size) + (j - pad_size)];
       }
     }
   }
 
 #ifdef DEBUG1
+  /*for (int i = 0; i < 10; i++)*/
   for (int i = 497; i < 512; i++)
   {
+    /*for (int j = 0; j < 10; j++)*/
     for (int j = 497; j < 512; j++)
     {
-      printf("%f ",hData[i*width  + j] );
+      printf("%f ",hData[i*512 + j]);
     }
     printf("\n");
   }
     printf("\n");
+  /*for (int i = 0; i < 10; i++)*/
   for (int i = 499; i < width; i++)
   {
+    /*for (int j = 0; j < 10; j++)*/
     for (int j = 499; j < height; j++)
     {
-      printf("%f ",hPaddedData[i*width + j] );
+      printf("%f ",hPaddedData[i*width + j]);
     }
     printf("\n");
   }
@@ -195,39 +195,13 @@ void serialConvolutionCPU(float *inputData,
       {
         for (int y = 0; y < dim; y++)
         {
+          // Do the convolution
           sum += inputData[(x + i)*width + (y + j)] * edge_detect_kernel[x][y]; 
         }
       }
       outputData[(i + 1)*width + (j + 1)] = sum;
     }
   }
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-//! Transform an image using texture lookups
-//! @param outputData  output data in global memory
-////////////////////////////////////////////////////////////////////////////////
-__global__ void transformKernel(float *outputData,
-                                int width,
-                                int height,
-                                float theta)
-{
-    // calculate normalized texture coordinates
-    unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
-    unsigned int y = blockIdx.y*blockDim.y + threadIdx.y;
-
-    float u = (float)x - (float)width/2; 
-    float v = (float)y - (float)height/2; 
-    float tu = u*cosf(theta) - v*sinf(theta); 
-    float tv = v*cosf(theta) + u*sinf(theta); 
-
-    tu /= (float)width; 
-    tv /= (float)height; 
-
-    // read from texture and write to global memory
-    outputData[y*width + x] = tex2D(tex, tu+0.5f, tv+0.5f);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -291,7 +265,6 @@ void runTest(int argc, char **argv)
 {
     int devID = findCudaDevice(argc, (const char **) argv);
 
-    // load image from disk
     float *hData = NULL;
     unsigned int width, height;
     char *imagePath = sdkFindFilePath(imageFilename, argv[0]);
@@ -303,139 +276,31 @@ void runTest(int argc, char **argv)
     }
 
     sdkLoadPGM(imagePath, &hData, &width, &height);
-
     unsigned int size = width * height * sizeof(float);
-    printf("Loaded '%s', %d x %d pixels\n", imageFilename, width, height);
 
-    //Load reference image from image (output)
-    float *hDataRef = (float *) malloc(size);
-    char *refPath = sdkFindFilePath(refFilename, argv[0]);
-
-    if (refPath == NULL)
-    {
-        printf("Unable to find reference image file: %s\n", refFilename);
-        exit(EXIT_FAILURE);
-    }
-
-    sdkLoadPGM(refPath, &hDataRef, &width, &height);
-
-    // Allocate device memory for result
-    float *dData = NULL;
-    checkCudaErrors(cudaMalloc((void **) &dData, size));
-
-    // Allocate array and copy image data
-    cudaChannelFormatDesc channelDesc =
-        cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
-    cudaArray *cuArray;
-    checkCudaErrors(cudaMallocArray(&cuArray,
-                                    &channelDesc,
-                                    width,
-                                    height));
-    checkCudaErrors(cudaMemcpyToArray(cuArray,
-                                      0,
-                                      0,
-                                      hData,
-                                      size,
-                                      cudaMemcpyHostToDevice));
-
-    // Set texture parameters
-    tex.addressMode[0] = cudaAddressModeWrap;
-    tex.addressMode[1] = cudaAddressModeWrap;
-    tex.filterMode = cudaFilterModeLinear;
-    tex.normalized = true;    // access with normalized texture coordinates
-
-    // Bind the array to the texture
-    checkCudaErrors(cudaBindTextureToArray(tex, cuArray, channelDesc));
+    printf("Loaded '%s', %d x %d pixels took %d bytes\n", imageFilename, width, height, size);
 
     // Generate Kernel
-    int dim = 7;
+    int kernel_dim = 5;
     kernel_type type = SHARPEN; 
-    float *kernel = (float *)malloc(dim*dim * sizeof(int));
-    generateKernel(kernel, dim, type);
+    float *kernel = (float *)malloc(kernel_dim*kernel_dim * sizeof(int));
+    generateKernel(kernel, kernel_dim, type);
 
     // Pad matrix according to the dimension of the kernel. For example, if
     // the kernel dimension is 3, we need to pad the input data by 1 row above 
     // and below and 1 coloumn before and after. If the dimension of the kernel
     // is 5, then we need to pad by 2, 7 --> pad by 3 and so on.
-    unsigned long paddedsize = (width + 2*(dim/2)) * (height + 2*(dim/2)) * sizeof(float);
-    float *hPaddedData = (float *) malloc(paddedsize);
-    padInputData(hData, width, height, hPaddedData, dim);
+    unsigned long paddedsize = (width + 2*(kernel_dim/2)) * (height + 2*(kernel_dim/2)) * sizeof(float);
+    float *hPaddedData = (float *)malloc(paddedsize);
+    padInputData(hData, width, height, hPaddedData, kernel_dim);
     
     // Run the serial convolution on the CPU
-    float *hSerialDataOut = (float *) malloc(size);
-    serialConvolutionCPU(hData, width, height, kernel, dim, hSerialDataOut);
+    float *hSerialDataOut = (float *) malloc(paddedsize);
+    serialConvolutionCPU(hData, width, height, kernel, kernel_dim, hSerialDataOut);
 
     sdkSavePGM("./data/conv_output.pgm", hSerialDataOut, width, height);
-    dim3 dimBlock(8, 8, 1);
-    dim3 dimGrid(width / dimBlock.x, height / dimBlock.y, 1);
 
-    // Warmup
-    transformKernel<<<dimGrid, dimBlock, 0>>>(dData, width, height, angle);
-
-    checkCudaErrors(cudaDeviceSynchronize());
-    StopWatchInterface *timer = NULL;
-    sdkCreateTimer(&timer);
-    sdkStartTimer(&timer);
-
-    // Execute the kernel
-    transformKernel<<<dimGrid, dimBlock, 0>>>(dData, width, height, angle);
-
-    // Check if kernel execution generated an error
-    getLastCudaError("Kernel execution failed");
-
-    checkCudaErrors(cudaDeviceSynchronize());
-    sdkStopTimer(&timer);
-    printf("Processing time: %f (ms)\n", sdkGetTimerValue(&timer));
-    printf("%.2f Mpixels/sec\n",
-           (width *height / (sdkGetTimerValue(&timer) / 1000.0f)) / 1e6);
-    sdkDeleteTimer(&timer);
-
-    // Allocate mem for the result on host side
-    float *hOutputData = (float *) malloc(size);
-    // copy result from device to host
-    checkCudaErrors(cudaMemcpy(hOutputData,
-                               dData,
-                               size,
-                               cudaMemcpyDeviceToHost));
-
-    // Write result to file
-    char outputFilename[1024];
-    strcpy(outputFilename, imagePath);
-    strcpy(outputFilename + strlen(imagePath) - 4, "_out.pgm");
-    sdkSavePGM(outputFilename, hOutputData, width, height);
-    printf("Wrote '%s'\n", outputFilename);
-
-    // Write regression file if necessary
-    if (checkCmdLineFlag(argc, (const char **) argv, "regression"))
-    {
-        // Write file for regression test
-        sdkWriteFile<float>("./data/regression.dat",
-                            hOutputData,
-                            width*height,
-                            0.0f,
-                            false);
-    }
-    else
-    {
-        // We need to reload the data from disk,
-        // because it is inverted upon output
-        sdkLoadPGM(outputFilename, &hOutputData, &width, &height);
-
-        printf("Comparing files\n");
-        printf("\toutput:    <%s>\n", outputFilename);
-        printf("\treference: <%s>\n", refPath);
-
-        testResult = compareData(hOutputData,
-                                 hDataRef,
-                                 width*height,
-                                 MAX_EPSILON_ERROR,
-                                 0.15f);
-    }
-
-    checkCudaErrors(cudaFree(dData));
-    checkCudaErrors(cudaFreeArray(cuArray));
     free(imagePath);
-    free(refPath);
     free(hSerialDataOut);
     free(kernel);
     free(hPaddedData);
