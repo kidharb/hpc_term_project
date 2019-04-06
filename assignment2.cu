@@ -144,28 +144,29 @@ int padInputData(float *hData, int width, int height, float *hPaddedData, int ke
       // & (row < width-pad_size & row < height-pad_size)
       if ((i >= pad_size) && (j >= pad_size) && (i < (width - pad_size)) && (j < (height - pad_size)))
       {
-        hPaddedData[i*width + j] = hData[i*(width - 2*pad_size) + (j - pad_size)];
+        hPaddedData[i*width + j] = hData[(i - pad_size)*(width - 2*pad_size) + (j - pad_size)];
       }
     }
   }
 
+#define DEBUG1
 #ifdef DEBUG1
-  /*for (int i = 0; i < 10; i++)*/
-  for (int i = 497; i < 512; i++)
+  for (int i = 0; i < 10; i++)
+  /*for (int i = 497; i < 512; i++)*/
   {
-    /*for (int j = 0; j < 10; j++)*/
-    for (int j = 497; j < 512; j++)
+    for (int j = 0; j < 10; j++)
+    /*for (int j = 497; j < 512; j++)*/
     {
       printf("%f ",hData[i*512 + j]);
     }
     printf("\n");
   }
     printf("\n");
-  /*for (int i = 0; i < 10; i++)*/
-  for (int i = 499; i < width; i++)
+  for (int i = 0; i < 10; i++)
+  /*for (int i = 499; i < width; i++)*/
   {
-    /*for (int j = 0; j < 10; j++)*/
-    for (int j = 499; j < height; j++)
+    for (int j = 0; j < 10; j++)
+    /*for (int j = 499; j < height; j++)*/
     {
       printf("%f ",hPaddedData[i*width + j]);
     }
