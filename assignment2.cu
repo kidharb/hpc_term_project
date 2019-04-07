@@ -40,6 +40,13 @@
 
 #define MAX_EPSILON_ERROR 5e-3f
 
+enum kernel_size
+{
+  SMALL  = 0,
+  MEDIUM = 1,
+  LARGE  = 2
+};
+
 enum kernel_type
 {
   SHARPEN = 0,
@@ -174,6 +181,37 @@ int padInputData(float *hData, int width, int height, float *hPaddedData, int ke
 #endif
   return 1;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+//! Parallel convolution on GPU using global memory
+////////////////////////////////////////////////////////////////////////////////
+__global__ void parallelConvolutionGlobal(float *inputData,
+                                          int width,
+                                          int height,
+                                          float* kernel,
+                                          int kernel_dim,
+                                          float *outputData)
+{
+  // loop over the input image
+  for (int i = 0; i < width; i++)
+  {
+    for (int j = 0; j < height; j++)
+    {
+      float sum =0.0;
+      // loop over the kernel
+      for (int x = 0; x < kernel_dim; x++)
+      {
+        for (int y = 0; y < kernel_dim; y++)
+        {
+          // Do the convolution
+          sum += inputData[(x + i)*width + (y + j)] * kernel[(x * kernel_dim) + y]; 
+        }
+      }
+      outputData[(i * width) + j] = sum;
+    }
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //! Serial convolution on CPU
 ////////////////////////////////////////////////////////////////////////////////
@@ -280,12 +318,14 @@ void runTest(int argc, char **argv)
 
     printf("Loaded '%s', %d x %d pixels took %d bytes\n", imageFilename, width, height, size);
 
-    // Generate Kernel
+////////////////////////////// Generate Kernel ////////////////////////////////////////////////////
     int kernel_dim = 3;
     kernel_type type = SHARPEN; 
     float *kernel = (float *)malloc(kernel_dim*kernel_dim * sizeof(int));
     generateKernel(kernel, kernel_dim, type);
+////////////////////////////// Generate Kernel Complete //////////////////////////////////////////
 
+////////////////////////////// Pad Input Data ////////////////////////////////////////////////////
     // Pad matrix according to the dimension of the kernel. For example, if
     // the kernel dimension is 3, we need to pad the input data by 1 row above 
     // and below and 1 coloumn before and after. If the dimension of the kernel
@@ -293,12 +333,63 @@ void runTest(int argc, char **argv)
     unsigned long paddedsize = (width + 2*(kernel_dim/2)) * (height + 2*(kernel_dim/2)) * sizeof(float);
     float *hPaddedData = (float *)malloc(paddedsize);
     padInputData(hData, width, height, hPaddedData, kernel_dim);
+////////////////////////////// Pad Input Data Complete ////////////////////////////////////////////
     
+////////////////////////////// Serial Convolution ////////////////////////////////////////////////////
     // Run the serial convolution on the CPU
     float *hSerialDataOut = (float *) malloc(paddedsize);
     serialConvolutionCPU(hData, width, height, kernel, kernel_dim, hSerialDataOut);
-
     sdkSavePGM("./data/conv_output.pgm", hSerialDataOut, width, height);
+////////////////////////////// Serial Convolution ////////////////////////////////////////////////////
+
+////////////////////////////// Naive Parallel Convolution ///////////////////////////////////////////
+    //Load reference image from image (output)
+    float *hDataRef = (float *) malloc(size);
+    char *refPath = sdkFindFilePath(refFilename, argv[0]);
+
+    if (refPath == NULL)
+    {
+        printf("Unable to find reference image file: %s\n", refFilename);
+        exit(EXIT_FAILURE);
+    }
+
+    sdkLoadPGM(refPath, &hDataRef, &width, &height);
+
+    // Allocate device memory for result
+    float *dData = NULL;
+		// Allocate device memory and copy image data
+    checkCudaErrors(cudaMalloc((void **) &dData, size));
+		checkCudaErrors(cudaMemcpy(dData,
+                                      hData,
+                                      size,
+                                      cudaMemcpyHostToDevice));
+
+    dim3 dimBlock(8, 8, 1);
+    dim3 dimGrid(width / dimBlock.x, height / dimBlock.y, 1);
+
+    checkCudaErrors(cudaDeviceSynchronize());
+    StopWatchInterface *timer = NULL;
+    sdkCreateTimer(&timer);
+    sdkStartTimer(&timer);
+    // Execute the kernel
+    transformKernel<<<dimGrid, dimBlock, 0>>>(dData, width, height);
+
+    // Check if kernel execution generated an error
+    getLastCudaError("Kernel execution failed");
+
+
+
+
+    checkCudaErrors(cudaDeviceSynchronize());
+    sdkStopTimer(&timer);
+    printf("Processing time: %f (ms)\n", sdkGetTimerValue(&timer));
+    printf("%.2f Mpixels/sec\n",
+           (width *height / (sdkGetTimerValue(&timer) / 1000.0f)) / 1e6);
+    sdkDeleteTimer(&timer);
+////////////////////////////// Naive Parallel Convolution Complete ////////////////////////////////////////
+
+
+
 
     free(imagePath);
     free(hSerialDataOut);
