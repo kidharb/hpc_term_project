@@ -42,9 +42,9 @@
 
 enum kernel_size
 {
-  SMALL  = 0,
-  MEDIUM = 1,
-  LARGE  = 2
+  SMALL  = 3,
+  MEDIUM = 5,
+  LARGE  = 7
 };
 
 enum kernel_type
@@ -60,7 +60,6 @@ const char *imageFilename = "lena_bw.pgm";
 const char *refFilename   = "ref_rotated.pgm";
 
 const char *sampleName = "simpleTexture";
-
 ////////////////////////////////////////////////////////////////////////////////
 // Constants
 const int edge_detect_kernel[3][3] = {
@@ -192,24 +191,24 @@ __global__ void parallelConvolutionGlobal(float *inputData,
                                           int kernel_dim,
                                           float *outputData)
 {
-  // loop over the input image
-  for (int i = 0; i < width; i++)
+  int x = threadIdx.x + blockDim.x * blockIdx.x;
+  int y = threadIdx.y + blockDim.y * blockIdx.y;
+  
+  if ((x > width) || (y > height))
+    return;
+
+  float sum =0.0;
+  // loop over the kernel
+  for (int i = 0; i < kernel_dim; i++)
   {
-    for (int j = 0; j < height; j++)
+    for (int j = 0; j < kernel_dim; j++)
     {
-      float sum =0.0;
-      // loop over the kernel
-      for (int x = 0; x < kernel_dim; x++)
-      {
-        for (int y = 0; y < kernel_dim; y++)
-        {
-          // Do the convolution
-          sum += inputData[(x + i)*width + (y + j)] * kernel[(x * kernel_dim) + y]; 
-        }
-      }
-      outputData[(i * width) + j] = sum;
+      // Do the convolution
+      sum += inputData[(x + i)*width + (y + j)] * kernel[(i * kernel_dim) + j]; 
     }
   }
+  outputData[(x * width) + y] = sum;
+  /*printf("%d) %f\n",x,inputData[x]);*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -240,6 +239,13 @@ void serialConvolutionCPU(float *inputData,
       outputData[(i * width) + j] = sum;
     }
   }
+#ifdef DEBUG2
+  printf("Data after serialConvolutionCPU\n");
+  for (int i = 512; i < 530; i++)
+  {
+    printf("%f\n",*(outputData +i));
+  }
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -296,6 +302,22 @@ int main(int argc, char **argv)
     exit(testResult ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+//! Compare results
+////////////////////////////////////////////////////////////////////////////////
+int compareResults(float * serialData, float * parallelData, unsigned long size)
+{
+  for (unsigned long i = 0; i < size; i++)
+  {
+    if (*(serialData + i) != *(parallelData + i))
+    {
+      /*printf("%d %f -- %f\n",i,*(serialData + i), *(parallelData + i));*/
+      return 0;
+    }
+  }
+  return 1;
+}
 ////////////////////////////////////////////////////////////////////////////////
 //! Run a simple test for CUDA
 ////////////////////////////////////////////////////////////////////////////////
@@ -321,8 +343,8 @@ void runTest(int argc, char **argv)
 ////////////////////////////// Generate Kernel ////////////////////////////////////////////////////
     int kernel_dim = 3;
     kernel_type type = SHARPEN; 
-    float *kernel = (float *)malloc(kernel_dim*kernel_dim * sizeof(int));
-    generateKernel(kernel, kernel_dim, type);
+    float *hKernel = (float *)malloc(kernel_dim*kernel_dim * sizeof(int));
+    generateKernel(hKernel, kernel_dim, type);
 ////////////////////////////// Generate Kernel Complete //////////////////////////////////////////
 
 ////////////////////////////// Pad Input Data ////////////////////////////////////////////////////
@@ -330,55 +352,70 @@ void runTest(int argc, char **argv)
     // the kernel dimension is 3, we need to pad the input data by 1 row above 
     // and below and 1 coloumn before and after. If the dimension of the kernel
     // is 5, then we need to pad by 2, 7 --> pad by 3 and so on.
-    unsigned long paddedsize = (width + 2*(kernel_dim/2)) * (height + 2*(kernel_dim/2)) * sizeof(float);
-    float *hPaddedData = (float *)malloc(paddedsize);
+    unsigned int paddedWidth = width + 2*(kernel_dim/2);
+    unsigned int paddedHeight = height + 2*(kernel_dim/2);
+    unsigned long paddedSize = paddedWidth * paddedHeight * sizeof(float);
+    float *hPaddedData = (float *)malloc(paddedSize);
     padInputData(hData, width, height, hPaddedData, kernel_dim);
 ////////////////////////////// Pad Input Data Complete ////////////////////////////////////////////
     
-////////////////////////////// Serial Convolution ////////////////////////////////////////////////////
+////////////////////////////// Serial Convolution /////////////////////////////////////////////////
     // Run the serial convolution on the CPU
-    float *hSerialDataOut = (float *) malloc(paddedsize);
-    serialConvolutionCPU(hData, width, height, kernel, kernel_dim, hSerialDataOut);
-    sdkSavePGM("./data/conv_output.pgm", hSerialDataOut, width, height);
-////////////////////////////// Serial Convolution ////////////////////////////////////////////////////
+    float *hSerialDataOut = (float *) malloc(paddedSize);
+    serialConvolutionCPU(hPaddedData, paddedWidth, paddedHeight, hKernel, kernel_dim, hSerialDataOut);
+    sdkSavePGM("./data/conv_output.pgm", hSerialDataOut, paddedWidth, paddedHeight);
+////////////////////////////// Serial Convolution Complete ////////////////////////////////////////
 
-////////////////////////////// Naive Parallel Convolution ///////////////////////////////////////////
-    //Load reference image from image (output)
-    float *hDataRef = (float *) malloc(size);
-    char *refPath = sdkFindFilePath(refFilename, argv[0]);
-
-    if (refPath == NULL)
-    {
-        printf("Unable to find reference image file: %s\n", refFilename);
-        exit(EXIT_FAILURE);
-    }
-
-    sdkLoadPGM(refPath, &hDataRef, &width, &height);
-
+////////////////////////////// Naive Parallel Convolution /////////////////////////////////////////
+    // Allocate device memory for input data
+    float *dPaddedInputData = NULL;
+    float *dParallelOutputData = NULL;
+		// Allocate input device memory
+    checkCudaErrors(cudaMalloc((void **) &dPaddedInputData, paddedSize));
     // Allocate device memory for result
-    float *dData = NULL;
-		// Allocate device memory and copy image data
-    checkCudaErrors(cudaMalloc((void **) &dData, size));
-		checkCudaErrors(cudaMemcpy(dData,
-                                      hData,
-                                      size,
-                                      cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMalloc((void **) &dParallelOutputData, paddedSize));
+		checkCudaErrors(cudaMemcpy(dPaddedInputData,
+                               hPaddedData,
+                               paddedSize,
+                               cudaMemcpyHostToDevice));
+
+
+    // Allocate device memory for kernel
+    float *dKernel = NULL;
+    checkCudaErrors(cudaMalloc((void **) &dKernel, kernel_dim*kernel_dim * sizeof(int)));
+		checkCudaErrors(cudaMemcpy(dKernel,
+                               hKernel,
+                               kernel_dim*kernel_dim * sizeof(int),
+                               cudaMemcpyHostToDevice));
 
     dim3 dimBlock(8, 8, 1);
-    dim3 dimGrid(width / dimBlock.x, height / dimBlock.y, 1);
+    dim3 dimGrid((paddedWidth / dimBlock.x)+1, (paddedHeight / dimBlock.y)+1, 1);
 
     checkCudaErrors(cudaDeviceSynchronize());
     StopWatchInterface *timer = NULL;
     sdkCreateTimer(&timer);
     sdkStartTimer(&timer);
     // Execute the kernel
-    transformKernel<<<dimGrid, dimBlock, 0>>>(dData, width, height);
+    parallelConvolutionGlobal<<<dimGrid, dimBlock, 0>>>(dPaddedInputData, paddedWidth, paddedHeight, dKernel, kernel_dim, dParallelOutputData);
+
+    // Allocate host memory for the result;
+    float *hParallelOutputData = (float *) malloc(paddedSize);
+		checkCudaErrors(cudaMemcpy(hParallelOutputData,
+                               dParallelOutputData,
+                               paddedSize,
+                               cudaMemcpyDeviceToHost));
+
+     testResult = compareData(hParallelOutputData,
+                              hSerialDataOut,
+                              paddedWidth*paddedHeight,
+                              MAX_EPSILON_ERROR,
+                              0.15f);
 
     // Check if kernel execution generated an error
     getLastCudaError("Kernel execution failed");
-
-
-
+    checkCudaErrors(cudaFree(dPaddedInputData));
+    checkCudaErrors(cudaFree(dKernel));
+    checkCudaErrors(cudaFree(dParallelOutputData));
 
     checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&timer);
@@ -388,12 +425,10 @@ void runTest(int argc, char **argv)
     sdkDeleteTimer(&timer);
 ////////////////////////////// Naive Parallel Convolution Complete ////////////////////////////////////////
 
-
-
-
     free(imagePath);
     free(hSerialDataOut);
-    free(kernel);
+    free(hKernel);
     free(hPaddedData);
+    free(hParallelOutputData);
 }
 
