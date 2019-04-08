@@ -180,6 +180,52 @@ int padInputData(float *hData, int width, int height, float *hPaddedData, int ke
 #endif
   return 1;
 }
+////////////////////////////////////////////////////////////////////////////////
+//! Parallel convolution on GPU using shared memory
+////////////////////////////////////////////////////////////////////////////////
+__global__ void parallelConvolutionShared(float *inputData,
+                                          int width,
+                                          int height,
+                                          float* kernel,
+                                          int kernel_dim,
+                                          float *outputData)
+{
+  int x = threadIdx.x + blockDim.x * blockIdx.x;
+  int y = threadIdx.y + blockDim.y * blockIdx.y;
+
+  extern __shared__ float output[];
+#if 0
+  __shared__ float partialSum[N];
+
+  partialSum[threadIdx.x] = d_in[threadIdx.x];
+  unsigned int t = threadIdx.x;
+
+
+  for(int stride = 1; stride < blockDim.x; stride *= 2)
+  {
+  __syncthreads();
+    if(t % (2*stride) == 0)
+    partialSum[t] += partialSum[t+stride];
+  }
+  *d_out = partialSum[0];
+#endif
+  
+  if ((x > width) || (y > height))
+    return;
+
+  float sum =0.0;
+  // loop over the kernel
+  for (int i = 0; i < kernel_dim; i++)
+  {
+    for (int j = 0; j < kernel_dim; j++)
+    {
+      // Do the convolution
+      sum += inputData[(x + i)*width + (y + j)] * kernel[(i * kernel_dim) + j]; 
+    }
+  }
+  output[(x * width) + y] = sum;
+  *outputData = output[0];
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 //! Parallel convolution on GPU using global memory
@@ -208,7 +254,6 @@ __global__ void parallelConvolutionGlobal(float *inputData,
     }
   }
   outputData[(x * width) + y] = sum;
-  /*printf("%d) %f\n",x,inputData[x]);*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -341,7 +386,7 @@ void runTest(int argc, char **argv)
     printf("Loaded '%s', %d x %d pixels took %d bytes\n", imageFilename, width, height, size);
 
 ////////////////////////////// Generate Kernel ////////////////////////////////////////////////////
-    int kernel_dim = 3;
+    int kernel_dim = 121;
     kernel_type type = SHARPEN; 
     float *hKernel = (float *)malloc(kernel_dim*kernel_dim * sizeof(int));
     generateKernel(hKernel, kernel_dim, type);
@@ -362,8 +407,17 @@ void runTest(int argc, char **argv)
 ////////////////////////////// Serial Convolution /////////////////////////////////////////////////
     // Run the serial convolution on the CPU
     float *hSerialDataOut = (float *) malloc(paddedSize);
+    StopWatchInterface *timer0 = NULL;
+    sdkCreateTimer(&timer0);
+    sdkStartTimer(&timer0);
+
     serialConvolutionCPU(hPaddedData, paddedWidth, paddedHeight, hKernel, kernel_dim, hSerialDataOut);
-    sdkSavePGM("./data/conv_output.pgm", hSerialDataOut, paddedWidth, paddedHeight);
+
+    sdkStopTimer(&timer0);
+    printf("Processing time Global Memory SerialCPU: %f (ms)\n", sdkGetTimerValue(&timer0));
+    printf("%.2f Mpixels/sec\n",
+           (width *height / (sdkGetTimerValue(&timer0) / 1000.0f)) / 1e6);
+    sdkDeleteTimer(&timer0);
 ////////////////////////////// Serial Convolution Complete ////////////////////////////////////////
 
 ////////////////////////////// Naive Parallel Convolution /////////////////////////////////////////
@@ -392,9 +446,9 @@ void runTest(int argc, char **argv)
     dim3 dimGrid((paddedWidth / dimBlock.x)+1, (paddedHeight / dimBlock.y)+1, 1);
 
     checkCudaErrors(cudaDeviceSynchronize());
-    StopWatchInterface *timer = NULL;
-    sdkCreateTimer(&timer);
-    sdkStartTimer(&timer);
+    StopWatchInterface *timer1 = NULL;
+    sdkCreateTimer(&timer1);
+    sdkStartTimer(&timer1);
     // Execute the kernel
     parallelConvolutionGlobal<<<dimGrid, dimBlock, 0>>>(dPaddedInputData, paddedWidth, paddedHeight, dKernel, kernel_dim, dParallelOutputData);
 
@@ -407,23 +461,73 @@ void runTest(int argc, char **argv)
 
      testResult = compareData(hParallelOutputData,
                               hSerialDataOut,
-                              paddedWidth*paddedHeight,
+                              width*height,
                               MAX_EPSILON_ERROR,
                               0.15f);
 
     // Check if kernel execution generated an error
-    getLastCudaError("Kernel execution failed");
+    getLastCudaError("Kernel execution failed 1");
+    checkCudaErrors(cudaFree(dPaddedInputData));
+    checkCudaErrors(cudaFree(dKernel));
+    checkCudaErrors(cudaFree(dParallelOutputData));
+
+    checkCudaErrors(cudaDeviceSynchronize());
+    sdkStopTimer(&timer1);
+    printf("Processing time Naive Solution: %f (ms)\n", sdkGetTimerValue(&timer1));
+    printf("%.2f Mpixels/sec\n",
+           (width *height / (sdkGetTimerValue(&timer1) / 1000.0f)) / 1e6);
+    sdkDeleteTimer(&timer1);
+////////////////////////////// Naive Parallel Convolution Complete ////////////////////////////////////////
+
+////////////////////////////// Shared Memory Parallel Convolution /////////////////////////////////////////
+		// Allocate input device memory
+    checkCudaErrors(cudaMalloc((void **) &dPaddedInputData, paddedSize));
+    // Allocate device memory for result
+    checkCudaErrors(cudaMalloc((void **) &dParallelOutputData, paddedSize));
+		checkCudaErrors(cudaMemcpy(dPaddedInputData,
+                               hPaddedData,
+                               paddedSize,
+                               cudaMemcpyHostToDevice));
+
+    // Allocate device memory for kernel
+    checkCudaErrors(cudaMalloc((void **) &dKernel, kernel_dim*kernel_dim * sizeof(int)));
+		checkCudaErrors(cudaMemcpy(dKernel,
+                               hKernel,
+                               kernel_dim*kernel_dim * sizeof(int),
+                               cudaMemcpyHostToDevice));
+
+    checkCudaErrors(cudaDeviceSynchronize());
+    StopWatchInterface *timer = NULL;
+    sdkCreateTimer(&timer);
+    sdkStartTimer(&timer);
+    // Execute the kernel
+    /*parallelConvolutionShared<<<dimGrid, dimBlock, paddedSize>>>(dPaddedInputData, paddedWidth, paddedHeight, dKernel, kernel_dim, dParallelOutputData);*/
+
+    // Allocate host memory for the result;
+		checkCudaErrors(cudaMemcpy(hParallelOutputData,
+                               dParallelOutputData,
+                               paddedSize,
+                               cudaMemcpyDeviceToHost));
+
+    /*testResult = compareData(hParallelOutputData,*/
+                              /*hSerialDataOut,*/
+                              /*paddedWidth*paddedHeight,*/
+                              /*MAX_EPSILON_ERROR,*/
+                              /*0.15f);*/
+
+    // Check if kernel execution generated an error
+    getLastCudaError("parallelConvolutionShared Kernel execution failed");
     checkCudaErrors(cudaFree(dPaddedInputData));
     checkCudaErrors(cudaFree(dKernel));
     checkCudaErrors(cudaFree(dParallelOutputData));
 
     checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&timer);
-    printf("Processing time: %f (ms)\n", sdkGetTimerValue(&timer));
+    printf("Processing time Shared Memory: %f (ms)\n", sdkGetTimerValue(&timer));
     printf("%.2f Mpixels/sec\n",
            (width *height / (sdkGetTimerValue(&timer) / 1000.0f)) / 1e6);
     sdkDeleteTimer(&timer);
-////////////////////////////// Naive Parallel Convolution Complete ////////////////////////////////////////
+////////////////////////////// Shared Memory Parallel Convolution Complete ////////////////////////////////////////
 
     free(imagePath);
     free(hSerialDataOut);
