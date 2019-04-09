@@ -193,7 +193,6 @@ __global__ void parallelConvolutionShared(float *inputData,
   int col = threadIdx.x + blockDim.x * blockIdx.x;
   int row = threadIdx.y + blockDim.y * blockIdx.y;
 
-    printf("blockdim.x (%d) blockdim.y (%d)\n",blockDim.x,blockDim.y); 
   // Declare a square matrix of tile size in shared memory
   __shared__ float input[TILE_SIZE][TILE_SIZE];
 
@@ -509,6 +508,7 @@ void runTest(int argc, char **argv)
     dim3 dimGridShared((width / TILE_SIZE)+1, (height / TILE_SIZE)+1, 1);
     parallelConvolutionShared<<<dimGridShared, dimBlockShared, 0>>>(dPaddedInputData, paddedWidth, paddedHeight, dKernel, pad_size, dParallelOutputData);
 
+    memset(hParallelOutputData,0,paddedSize);
     // Copy the reult back into host memory
     checkCudaErrors(cudaMemcpy(hParallelOutputData,
                                dParallelOutputData,
