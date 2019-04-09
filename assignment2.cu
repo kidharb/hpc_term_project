@@ -39,7 +39,7 @@
 #include <helper_cuda.h>         // helper functions for CUDA error check
 
 #define MAX_EPSILON_ERROR 5e-3f
-
+#define TILE_SIZE 64 // 64 * 64 * 4 = 16384 < 49152bytes
 enum kernel_size
 {
   SMALL  = 3,
@@ -184,47 +184,46 @@ int padInputData(float *hData, int width, int height, float *hPaddedData, int ke
 //! Parallel convolution on GPU using shared memory
 ////////////////////////////////////////////////////////////////////////////////
 __global__ void parallelConvolutionShared(float *inputData,
-                                          int width,
-                                          int height,
-                                          float* kernel,
-                                          int kernel_dim,
-                                          float *outputData)
+                                                int width,
+                                                int height,
+                                                float* kernel,
+                                                int pad_size,
+                                                float *outputData)
 {
-  int x = threadIdx.x + blockDim.x * blockIdx.x;
-  int y = threadIdx.y + blockDim.y * blockIdx.y;
+  int col = threadIdx.x + blockDim.x * blockIdx.x;
+  int row = threadIdx.y + blockDim.y * blockIdx.y;
 
-  extern __shared__ float output[];
-#if 0
-  __shared__ float partialSum[N];
+    printf("blockdim.x (%d) blockdim.y (%d)\n",blockDim.x,blockDim.y); 
+  // Declare a square matrix of tile size in shared memory
+  __shared__ float input[TILE_SIZE][TILE_SIZE];
 
-  partialSum[threadIdx.x] = d_in[threadIdx.x];
-  unsigned int t = threadIdx.x;
-
-
-  for(int stride = 1; stride < blockDim.x; stride *= 2)
-  {
-  __syncthreads();
-    if(t % (2*stride) == 0)
-    partialSum[t] += partialSum[t+stride];
-  }
-  *d_out = partialSum[0];
-#endif
+  int kernel_dim = (2 * pad_size) + 1;
   
-  if ((x > width) || (y > height))
-    return;
-
-  float sum =0.0;
-  // loop over the kernel
-  for (int i = 0; i < kernel_dim; i++)
+  for (int k = 0; k < (((width - 1)/ TILE_SIZE) + 1); k++)
   {
-    for (int j = 0; j < kernel_dim; j++)
+    // Make sure we are within the bound of the tile
+    if ((row < height) && ((threadIdx.x + (k * TILE_SIZE)) < width))
     {
-      // Do the convolution
-      sum += inputData[(x + i)*width + (y + j)] * kernel[(i * kernel_dim) + j]; 
+      // Copy the global memory to shared memory
+      input[threadIdx.y][threadIdx.x] = inputData[(row*width) + threadIdx.x + (k*TILE_SIZE)];
     }
+    else
+    {
+        input[threadIdx.y][threadIdx.x] = 0.0;
+    }
+    __syncthreads();
+
+    float sum = 0.0; 
+    for (int i = 0; i < kernel_dim; i++)
+    {
+      for (int j = 0; j < kernel_dim; j++)
+      {
+        // Do the convolution
+        sum += input[row + i][col + j] * kernel[(i * kernel_dim) + j]; 
+      }
+    }
+    outputData[(row * width) + col] = sum;
   }
-  output[(x * width) + y] = sum;
-  *outputData = output[0];
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -386,8 +385,9 @@ void runTest(int argc, char **argv)
     printf("Loaded '%s', %d x %d pixels took %d bytes\n", imageFilename, width, height, size);
 
 ////////////////////////////// Generate Kernel ////////////////////////////////////////////////////
-    int kernel_dim = 121;
-    kernel_type type = SHARPEN; 
+    int pad_size = 4;
+    int kernel_dim = (2 * pad_size) + 1;
+    kernel_type type = AVERAGE; 
     float *hKernel = (float *)malloc(kernel_dim*kernel_dim * sizeof(int));
     generateKernel(hKernel, kernel_dim, type);
 ////////////////////////////// Generate Kernel Complete //////////////////////////////////////////
@@ -480,6 +480,9 @@ void runTest(int argc, char **argv)
 ////////////////////////////// Naive Parallel Convolution Complete ////////////////////////////////////////
 
 ////////////////////////////// Shared Memory Parallel Convolution /////////////////////////////////////////
+// The approach taken here is as follows
+//    A1) Uses tiles so that we can fit the data into shared memory
+
 		// Allocate input device memory
     checkCudaErrors(cudaMalloc((void **) &dPaddedInputData, paddedSize));
     // Allocate device memory for result
@@ -500,20 +503,33 @@ void runTest(int argc, char **argv)
     StopWatchInterface *timer = NULL;
     sdkCreateTimer(&timer);
     sdkStartTimer(&timer);
-    // Execute the kernel
-    /*parallelConvolutionShared<<<dimGrid, dimBlock, paddedSize>>>(dPaddedInputData, paddedWidth, paddedHeight, dKernel, kernel_dim, dParallelOutputData);*/
 
-    // Allocate host memory for the result;
-		checkCudaErrors(cudaMemcpy(hParallelOutputData,
+    // Execute the kernel
+    dim3 dimBlockShared(TILE_SIZE, 1, 1);
+    dim3 dimGridShared((width / TILE_SIZE)+1, (height / TILE_SIZE)+1, 1);
+    parallelConvolutionShared<<<dimGridShared, dimBlockShared, 0>>>(dPaddedInputData, paddedWidth, paddedHeight, dKernel, pad_size, dParallelOutputData);
+
+    // Copy the reult back into host memory
+    checkCudaErrors(cudaMemcpy(hParallelOutputData,
                                dParallelOutputData,
                                paddedSize,
                                cudaMemcpyDeviceToHost));
+#ifdef DEBUG
+  for (int i = 0; i < 10; i++)
+  {
+    for (int j = 0; j < 10; j++)
+    {
+      printf("%f ",hParallelOutputData[i*width + j]);
+    }
+    printf("\n");
+  }
+#endif
 
-    /*testResult = compareData(hParallelOutputData,*/
-                              /*hSerialDataOut,*/
-                              /*paddedWidth*paddedHeight,*/
-                              /*MAX_EPSILON_ERROR,*/
-                              /*0.15f);*/
+    testResult = compareData(hParallelOutputData,
+                              hSerialDataOut,
+                              paddedWidth*paddedHeight,
+                              MAX_EPSILON_ERROR,
+                              0.15f);
 
     // Check if kernel execution generated an error
     getLastCudaError("parallelConvolutionShared Kernel execution failed");
