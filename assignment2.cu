@@ -40,6 +40,7 @@
 
 #define MAX_EPSILON_ERROR 5e-3f
 #define TILE_SIZE 64 // 64 * 64 * 4 = 16384 < 49152bytes
+#define MAX_SHARED_MEMORY_BYTES 16384
 enum kernel_size
 {
   SMALL  = 3,
@@ -180,6 +181,52 @@ int padInputData(float *hData, int width, int height, float *hPaddedData, int ke
 #endif
   return 1;
 }
+
+__constant__ float kernel_gpu[MAX_SHARED_MEMORY_BYTES];
+////////////////////////////////////////////////////////////////////////////////
+//! Parallel convolution on GPU using shared and constant memory for kernel
+////////////////////////////////////////////////////////////////////////////////
+__global__ void parallelConvolutionSharedConstant(float *inputData,
+                                                  int width,
+                                                  int height,
+                                                  int pad_size,
+                                                  float *outputData)
+{
+  int col = threadIdx.x + blockDim.x * blockIdx.x;
+  int row = threadIdx.y + blockDim.y * blockIdx.y;
+
+  // Declare a square matrix of tile size in shared memory
+  __shared__ float input[TILE_SIZE][TILE_SIZE];
+
+  int kernel_dim = (2 * pad_size) + 1;
+  
+  for (int k = 0; k < (((width - 1)/ TILE_SIZE) + 1); k++)
+  {
+    // Make sure we are within the bound of the tile
+    if ((row < height) && ((threadIdx.x + (k * TILE_SIZE)) < width))
+    {
+      // Copy the global memory to shared memory
+      input[threadIdx.y][threadIdx.x] = inputData[(row*width) + threadIdx.x + (k*TILE_SIZE)];
+    }
+    else
+    {
+        input[threadIdx.y][threadIdx.x] = 0.0;
+    }
+    __syncthreads();
+
+    float sum = 0.0; 
+    for (int i = 0; i < kernel_dim; i++)
+    {
+      for (int j = 0; j < kernel_dim; j++)
+      {
+        // Do the convolution
+        sum += input[row + i][col + j] * kernel_gpu[(i * kernel_dim) + j]; 
+      }
+    }
+    outputData[(row * width) + col] = sum;
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 //! Parallel convolution on GPU using shared memory
 ////////////////////////////////////////////////////////////////////////////////
@@ -384,7 +431,7 @@ void runTest(int argc, char **argv)
     printf("Loaded '%s', %d x %d pixels took %d bytes\n", imageFilename, width, height, size);
 
 ////////////////////////////// Generate Kernel ////////////////////////////////////////////////////
-    int pad_size = 4;
+    int pad_size = 20;
     int kernel_dim = (2 * pad_size) + 1;
     kernel_type type = AVERAGE; 
     float *hKernel = (float *)malloc(kernel_dim*kernel_dim * sizeof(int));
@@ -543,6 +590,67 @@ void runTest(int argc, char **argv)
     printf("%.2f Mpixels/sec\n",
            (width *height / (sdkGetTimerValue(&timer) / 1000.0f)) / 1e6);
     sdkDeleteTimer(&timer);
+////////////////////////////// Shared Memory Parallel Convolution Complete ////////////////////////////////////////
+
+////////////////////////////// Shared Memory Constant Kernel Parallel Convolution /////////////////////////////////////////
+// The approach taken here is as follows
+//    A1) Uses tiles so that we can fit the data into shared memory
+//    A1) Uses constant memory for the kernel
+
+		// Allocate input device memory
+    checkCudaErrors(cudaMalloc((void **) &dPaddedInputData, paddedSize));
+    // Allocate device memory for result
+    checkCudaErrors(cudaMalloc((void **) &dParallelOutputData, paddedSize));
+		checkCudaErrors(cudaMemcpy(dPaddedInputData,
+                               hPaddedData,
+                               paddedSize,
+                               cudaMemcpyHostToDevice));
+
+    // Allocate device memory for kernel
+#if 0
+    checkCudaErrors(cudaMalloc((void **) &dKernel, kernel_dim*kernel_dim * sizeof(int)));
+		checkCudaErrors(cudaMemcpy(dKernel,
+                               hKernel,
+                               kernel_dim*kernel_dim * sizeof(int),
+                               cudaMemcpyHostToDevice));
+#endif
+
+    checkCudaErrors(cudaDeviceSynchronize());
+    StopWatchInterface *timer2 = NULL;
+    sdkCreateTimer(&timer2);
+    sdkStartTimer(&timer2);
+
+    // Execute the kernel
+    /*dim3 dimBlockShared(TILE_SIZE, 1, 1);*/
+    /*dim3 dimGridShared((width / TILE_SIZE)+1, (height / TILE_SIZE)+1, 1);*/
+    cudaMemcpyToSymbol(kernel_gpu, hKernel, kernel_dim * kernel_dim * sizeof(int));
+
+    parallelConvolutionSharedConstant<<<dimGridShared, dimBlockShared, 0>>>(dPaddedInputData, paddedWidth, paddedHeight, pad_size, dParallelOutputData);
+
+    memset(hParallelOutputData,0,paddedSize);
+    // Copy the reult back into host memory
+    checkCudaErrors(cudaMemcpy(hParallelOutputData,
+                               dParallelOutputData,
+                               paddedSize,
+                               cudaMemcpyDeviceToHost));
+
+    testResult = compareData(hParallelOutputData,
+                              hSerialDataOut,
+                              paddedWidth*paddedHeight,
+                              MAX_EPSILON_ERROR,
+                              0.15f);
+
+    // Check if kernel execution generated an error
+    getLastCudaError("parallelConvolutionShared Kernel execution failed");
+    checkCudaErrors(cudaFree(dPaddedInputData));
+    checkCudaErrors(cudaFree(dParallelOutputData));
+
+    checkCudaErrors(cudaDeviceSynchronize());
+    sdkStopTimer(&timer2);
+    printf("Processing time Constant and Shared Memory: %f (ms)\n", sdkGetTimerValue(&timer2));
+    printf("%.2f Mpixels/sec\n",
+           (width *height / (sdkGetTimerValue(&timer2) / 1000.0f)) / 1e6);
+    sdkDeleteTimer(&timer2);
 ////////////////////////////// Shared Memory Parallel Convolution Complete ////////////////////////////////////////
 
     free(imagePath);
