@@ -56,7 +56,7 @@ enum kernel_type
 };
 
 // Define the files that are to be save and the reference images for validation
-const char *imageFilename = "lena_bw.pgm";
+char *imageFilename = (char *)malloc(20*sizeof(char));
 // Define the files that are to be save ";
 const char *refFilename   = "ref_rotated.pgm";
 
@@ -360,13 +360,19 @@ void serialTransformCPU(float *inputData,
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
+int pad_size = 10;;
 int main(int argc, char **argv)
 {
     printf("%s starting...\n", sampleName);
 
     // Process command-line arguments
-    if (argc > 1)
+    if (argc > 0)
     {
+      char *p;
+      pad_size = strtol(argv[1],&p,10);
+      strlcpy(&imageFilename[0], argv[2], 20);
+
+#if 0
         if (checkCmdLineFlag(argc, (const char **) argv, "input"))
         {
             getCmdLineArgumentString(argc,
@@ -381,6 +387,7 @@ int main(int argc, char **argv)
                                          "reference",
                                          (char **) &refFilename);
             }
+
             else
             {
                 printf("-input flag should be used with -reference flag");
@@ -392,6 +399,7 @@ int main(int argc, char **argv)
             printf("-reference flag should be used with -input flag");
             exit(EXIT_FAILURE);
         }
+#endif
     }
 
     runTest(argc, argv);
@@ -442,7 +450,6 @@ void runTest(int argc, char **argv)
     printf("Loaded '%s', %d x %d pixels took %d bytes\n", imageFilename, width, height, size);
 
 ////////////////////////////// Generate Kernel ////////////////////////////////////////////////////
-    int pad_size = 20;
     int kernel_dim = (2 * pad_size) + 1;
     kernel_type type = AVERAGE; 
     float *hKernel = (float *)malloc(kernel_dim*kernel_dim * sizeof(int));
@@ -471,7 +478,7 @@ void runTest(int argc, char **argv)
     serialConvolutionCPU(hPaddedData, paddedWidth, paddedHeight, hKernel, kernel_dim, hSerialDataOut);
 
     sdkStopTimer(&timer0);
-    printf("Processing time Global Memory SerialCPU: %f (ms)\n", sdkGetTimerValue(&timer0));
+    printf("Processing time Global Memory SerialCPU: %f (ms) for PAD size %d\n", sdkGetTimerValue(&timer0),pad_size);
     printf("%.2f Mpixels/sec\n",
            (width *height / (sdkGetTimerValue(&timer0) / 1000.0f)) / 1e6);
     sdkDeleteTimer(&timer0);
@@ -530,7 +537,7 @@ void runTest(int argc, char **argv)
 
     checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&timer1);
-    printf("Processing time Naive Solution: %f (ms)\n", sdkGetTimerValue(&timer1));
+    printf("Processing time Naive Solution: %f (ms) for PAD size %d\n", sdkGetTimerValue(&timer1),pad_size);
     printf("%.2f Mpixels/sec\n",
            (width *height / (sdkGetTimerValue(&timer1) / 1000.0f)) / 1e6);
     sdkDeleteTimer(&timer1);
@@ -587,7 +594,7 @@ void runTest(int argc, char **argv)
 
     checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&timer);
-    printf("Processing time Shared Memory: %f (ms)\n", sdkGetTimerValue(&timer));
+    printf("Processing time Shared Memory: %f (ms) for PAD size %d\n", sdkGetTimerValue(&timer),pad_size);
     printf("%.2f Mpixels/sec\n",
            (width *height / (sdkGetTimerValue(&timer) / 1000.0f)) / 1e6);
     sdkDeleteTimer(&timer);
@@ -636,7 +643,7 @@ void runTest(int argc, char **argv)
 
     checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&timer2);
-    printf("Processing time Constant and Shared Memory: %f (ms)\n", sdkGetTimerValue(&timer2));
+    printf("Processing time Constant and Shared Memory: %f (ms) for PAD size %d\n", sdkGetTimerValue(&timer2),pad_size);
     printf("%.2f Mpixels/sec\n",
            (width *height / (sdkGetTimerValue(&timer2) / 1000.0f)) / 1e6);
     sdkDeleteTimer(&timer2);
@@ -709,7 +716,7 @@ void runTest(int argc, char **argv)
 
     checkCudaErrors(cudaDeviceSynchronize());
     sdkStopTimer(&timer3);
-    printf("Processing time Shared and Textured Memory: %f (ms)\n", sdkGetTimerValue(&timer3));
+    printf("Processing time Shared and Textured Memory: %f (ms) for PAD size %d\n", sdkGetTimerValue(&timer3),pad_size);
     printf("%.2f Mpixels/sec\n",
            (width *height / (sdkGetTimerValue(&timer3) / 1000.0f)) / 1e6);
     sdkDeleteTimer(&timer3);
@@ -720,5 +727,6 @@ void runTest(int argc, char **argv)
     free(hKernel);
     free(hPaddedData);
     free(hParallelOutputData);
+    free(imageFilename);
 }
 
