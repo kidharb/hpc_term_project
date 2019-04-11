@@ -182,6 +182,51 @@ int padInputData(float *hData, int width, int height, float *hPaddedData, int ke
   return 1;
 }
 
+texture<float, cudaTextureType2D, cudaReadModeElementType> tex;
+////////////////////////////////////////////////////////////////////////////////
+//! Parallel convolution on GPU using shared and constant memory for kernel
+////////////////////////////////////////////////////////////////////////////////
+__global__ void parallelConvolutionSharedTextured(float *inputData,
+                                                  int width,
+                                                  int height,
+                                                  int pad_size,
+                                                  float *outputData)
+{
+  int col = threadIdx.x + blockDim.x * blockIdx.x;
+  int row = threadIdx.y + blockDim.y * blockIdx.y;
+
+  // Declare a square matrix of tile size in shared memory
+  __shared__ float input[TILE_SIZE][TILE_SIZE];
+
+  int kernel_dim = (2 * pad_size) + 1;
+  
+  for (int k = 0; k < (((width - 1)/ TILE_SIZE) + 1); k++)
+  {
+    // Make sure we are within the bound of the tile
+    if ((row < height) && ((threadIdx.x + (k * TILE_SIZE)) < width))
+    {
+      // Copy the global memory to shared memory
+      input[threadIdx.y][threadIdx.x] = inputData[(row*width) + threadIdx.x + (k*TILE_SIZE)];
+    }
+    else
+    {
+        input[threadIdx.y][threadIdx.x] = 0.0;
+    }
+    __syncthreads();
+
+    float sum = 0.0; 
+    for (int i = 0; i < kernel_dim; i++)
+    {
+      for (int j = 0; j < kernel_dim; j++)
+      {
+        // Do the convolution
+        sum += input[row + i][col + j] * tex2D(tex,i * kernel_dim, j); 
+      }
+    }
+    outputData[(row * width) + col] = sum;
+  }
+}
+
 __constant__ float kernel_gpu[MAX_SHARED_MEMORY_BYTES];
 ////////////////////////////////////////////////////////////////////////////////
 //! Parallel convolution on GPU using shared and constant memory for kernel
@@ -482,10 +527,10 @@ void runTest(int argc, char **argv)
 
     // Allocate device memory for kernel
     float *dKernel = NULL;
-    checkCudaErrors(cudaMalloc((void **) &dKernel, kernel_dim*kernel_dim * sizeof(int)));
+    checkCudaErrors(cudaMalloc((void **) &dKernel, kernel_dim*kernel_dim * sizeof(float)));
 		checkCudaErrors(cudaMemcpy(dKernel,
                                hKernel,
-                               kernel_dim*kernel_dim * sizeof(int),
+                               kernel_dim*kernel_dim * sizeof(float),
                                cudaMemcpyHostToDevice));
 
     dim3 dimBlock(8, 8, 1);
@@ -539,10 +584,10 @@ void runTest(int argc, char **argv)
                                cudaMemcpyHostToDevice));
 
     // Allocate device memory for kernel
-    checkCudaErrors(cudaMalloc((void **) &dKernel, kernel_dim*kernel_dim * sizeof(int)));
+    checkCudaErrors(cudaMalloc((void **) &dKernel, kernel_dim*kernel_dim * sizeof(float)));
 		checkCudaErrors(cudaMemcpy(dKernel,
                                hKernel,
-                               kernel_dim*kernel_dim * sizeof(int),
+                               kernel_dim*kernel_dim * sizeof(float),
                                cudaMemcpyHostToDevice));
 
     checkCudaErrors(cudaDeviceSynchronize());
@@ -592,7 +637,7 @@ void runTest(int argc, char **argv)
     sdkDeleteTimer(&timer);
 ////////////////////////////// Shared Memory Parallel Convolution Complete ////////////////////////////////////////
 
-////////////////////////////// Shared Memory Constant Kernel Parallel Convolution /////////////////////////////////////////
+////////////////////////////// Shared Memory Constant Kernel Parallel Convolution /////////////////////////////////
 // The approach taken here is as follows
 //    A1) Uses tiles so that we can fit the data into shared memory
 //    A1) Uses constant memory for the kernel
@@ -623,7 +668,7 @@ void runTest(int argc, char **argv)
     // Execute the kernel
     /*dim3 dimBlockShared(TILE_SIZE, 1, 1);*/
     /*dim3 dimGridShared((width / TILE_SIZE)+1, (height / TILE_SIZE)+1, 1);*/
-    cudaMemcpyToSymbol(kernel_gpu, hKernel, kernel_dim * kernel_dim * sizeof(int));
+    cudaMemcpyToSymbol(kernel_gpu, hKernel, kernel_dim * kernel_dim * sizeof(float));
 
     parallelConvolutionSharedConstant<<<dimGridShared, dimBlockShared, 0>>>(dPaddedInputData, paddedWidth, paddedHeight, pad_size, dParallelOutputData);
 
@@ -651,7 +696,92 @@ void runTest(int argc, char **argv)
     printf("%.2f Mpixels/sec\n",
            (width *height / (sdkGetTimerValue(&timer2) / 1000.0f)) / 1e6);
     sdkDeleteTimer(&timer2);
-////////////////////////////// Shared Memory Parallel Convolution Complete ////////////////////////////////////////
+////////////////////////////// Shared Memory Constant Memory Parallel Convolution Complete /////////////////////////
+
+////////////////////////////// Shared Memory Textured Kernel Parallel Convolution /////////////////////////////////
+// The approach taken here is as follows
+//    A1) Uses tiles so that we can fit the data into shared memory
+//    A1) Uses textured memory for the kernel
+
+		// Allocate input device memory
+    checkCudaErrors(cudaMalloc((void **) &dPaddedInputData, paddedSize));
+    // Allocate device memory for result
+    checkCudaErrors(cudaMalloc((void **) &dParallelOutputData, paddedSize));
+		checkCudaErrors(cudaMemcpy(dPaddedInputData,
+                               hPaddedData,
+                               paddedSize,
+                               cudaMemcpyHostToDevice));
+
+    // Allocate device memory for kernel
+#if 0
+    checkCudaErrors(cudaMalloc((void **) &dKernel, kernel_dim*kernel_dim * sizeof(int)));
+		checkCudaErrors(cudaMemcpy(dKernel,
+                               hKernel,
+                               kernel_dim*kernel_dim * sizeof(int),
+                               cudaMemcpyHostToDevice));
+#endif
+
+    checkCudaErrors(cudaDeviceSynchronize());
+    StopWatchInterface *timer3 = NULL;
+    sdkCreateTimer(&timer3);
+    sdkStartTimer(&timer3);
+
+    // Execute the kernel
+#if 0
+    cudaMemcpyToSymbol(kernel_gpu, hKernel, kernel_dim * kernel_dim * sizeof(int));
+#else
+// Allocate array and copy image data
+    cudaChannelFormatDesc channelDesc =
+        cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindFloat);
+    cudaArray *cuKernel;
+    checkCudaErrors(cudaMallocArray(&cuKernel,
+                                    &channelDesc,
+                                    kernel_dim,
+                                    kernel_dim));
+    checkCudaErrors(cudaMemcpyToArray(cuKernel,
+                                      0,
+                                      0,
+                                      hKernel,
+                                      kernel_dim * kernel_dim * sizeof(float),
+                                      cudaMemcpyHostToDevice));
+
+    // Set texture parameters
+    tex.addressMode[0] = cudaAddressModeWrap;
+    tex.addressMode[1] = cudaAddressModeWrap;
+    tex.filterMode = cudaFilterModeLinear;
+    tex.normalized = true;    // access with normalized texture coordinates
+
+    // Bind the array to the texture
+    checkCudaErrors(cudaBindTextureToArray(tex, cuKernel, channelDesc));
+
+#endif
+    parallelConvolutionSharedTextured<<<dimGridShared, dimBlockShared, 0>>>(dPaddedInputData, paddedWidth, paddedHeight, pad_size, dParallelOutputData);
+
+    memset(hParallelOutputData,0,paddedSize);
+    // Copy the reult back into host memory
+    checkCudaErrors(cudaMemcpy(hParallelOutputData,
+                               dParallelOutputData,
+                               paddedSize,
+                               cudaMemcpyDeviceToHost));
+
+    testResult = compareData(hParallelOutputData,
+                              hSerialDataOut,
+                              paddedWidth*paddedHeight,
+                              MAX_EPSILON_ERROR,
+                              0.15f);
+
+    // Check if kernel execution generated an error
+    getLastCudaError("parallelConvolutionShared Textured Kernel execution failed");
+    checkCudaErrors(cudaFree(dPaddedInputData));
+    checkCudaErrors(cudaFree(dParallelOutputData));
+
+    checkCudaErrors(cudaDeviceSynchronize());
+    sdkStopTimer(&timer3);
+    printf("Processing time Constant and Textured Memory: %f (ms)\n", sdkGetTimerValue(&timer3));
+    printf("%.2f Mpixels/sec\n",
+           (width *height / (sdkGetTimerValue(&timer3) / 1000.0f)) / 1e6);
+    sdkDeleteTimer(&timer3);
+////////////////////////////// Shared Memory Textured Kernel Parallel Convolution Complete ////////////////////////////////////////
 
     free(imagePath);
     free(hSerialDataOut);
