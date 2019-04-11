@@ -115,16 +115,6 @@ int generateKernel(float *kernel, int dim, kernel_type type)
   if (SHARPEN == type)
     kernel[center*dim + center] = 9;
 
-#ifdef DEBUG
-  for (int i = 0; i < dim; i++)
-  {
-    for (int j = 0; j < dim; j++)
-    {
-      printf("%f ",kernel[i*dim + j]);
-    }
-    printf("\n");
-  }
-#endif
   return 1;
 }
 
@@ -156,29 +146,6 @@ int padInputData(float *hData, int width, int height, float *hPaddedData, int ke
     }
   }
 
-#ifdef DEBUG1
-  /*for (int i = 0; i < 10; i++)*/
-  for (int i = 497; i < 512; i++)
-  {
-    /*for (int j = 0; j < 10; j++)*/
-    for (int j = 497; j < 512; j++)
-    {
-      printf("%f ",hData[i*512 + j]);
-    }
-    printf("\n");
-  }
-    printf("\n");
-  /*for (int i = 0; i < 10; i++)*/
-  for (int i = 499; i < width; i++)
-  {
-    /*for (int j = 0; j < 10; j++)*/
-    for (int j = 499; j < height; j++)
-    {
-      printf("%f ",hPaddedData[i*width + j]);
-    }
-    printf("\n");
-  }
-#endif
   return 1;
 }
 
@@ -380,13 +347,6 @@ void serialConvolutionCPU(float *inputData,
       outputData[(i * width) + j] = sum;
     }
   }
-#ifdef DEBUG2
-  printf("Data after serialConvolutionCPU\n");
-  for (int i = 512; i < 530; i++)
-  {
-    printf("%f\n",*(outputData +i));
-  }
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -612,16 +572,6 @@ void runTest(int argc, char **argv)
                                dParallelOutputData,
                                paddedSize,
                                cudaMemcpyDeviceToHost));
-#ifdef DEBUG
-  for (int i = 0; i < 10; i++)
-  {
-    for (int j = 0; j < 10; j++)
-    {
-      printf("%f ",hParallelOutputData[i*width + j]);
-    }
-    printf("\n");
-  }
-#endif
 
     testResult = compareData(hParallelOutputData,
                               hSerialDataOut,
@@ -657,23 +607,11 @@ void runTest(int argc, char **argv)
                                paddedSize,
                                cudaMemcpyHostToDevice));
 
-    // Allocate device memory for kernel
-#if 0
-    checkCudaErrors(cudaMalloc((void **) &dKernel, kernel_dim*kernel_dim * sizeof(int)));
-		checkCudaErrors(cudaMemcpy(dKernel,
-                               hKernel,
-                               kernel_dim*kernel_dim * sizeof(int),
-                               cudaMemcpyHostToDevice));
-#endif
-
     checkCudaErrors(cudaDeviceSynchronize());
     StopWatchInterface *timer2 = NULL;
     sdkCreateTimer(&timer2);
     sdkStartTimer(&timer2);
 
-    // Execute the kernel
-    /*dim3 dimBlockShared(TILE_SIZE, 1, 1);*/
-    /*dim3 dimGridShared((width / TILE_SIZE)+1, (height / TILE_SIZE)+1, 1);*/
     cudaMemcpyToSymbol(kernel_gpu, hKernel, kernel_dim * kernel_dim * sizeof(float));
 
     parallelConvolutionSharedConstant<<<dimGridShared, dimBlockShared, 0>>>(dPaddedInputData, paddedWidth, paddedHeight, pad_size, dParallelOutputData);
