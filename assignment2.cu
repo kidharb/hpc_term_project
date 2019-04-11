@@ -181,7 +181,7 @@ __global__ void parallelConvolutionSharedTextured(float *inputData,
     {
         input[threadIdx.y][threadIdx.x] = 0.0;
     }
-    __syncthreads();
+    /*__syncthreads();*/
 
     float sum = 0.0; 
     for (int i = 0; i < kernel_dim; i++)
@@ -228,7 +228,7 @@ __global__ void parallelConvolutionSharedConstant(float *inputData,
     {
         input[threadIdx.y][threadIdx.x] = 0.0;
     }
-    __syncthreads();
+    /*__syncthreads();*/
 
     float sum = 0.0; 
     for (int i = 0; i < kernel_dim; i++)
@@ -275,7 +275,7 @@ __global__ void parallelConvolutionShared(float *inputData,
     {
         input[threadIdx.y][threadIdx.x] = 0.0;
     }
-    __syncthreads();
+    /*__syncthreads();*/
 
     float sum = 0.0; 
     for (int i = 0; i < kernel_dim; i++)
@@ -361,6 +361,7 @@ void serialTransformCPU(float *inputData,
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
 int pad_size = 10;;
+kernel_type type = AVERAGE; 
 int main(int argc, char **argv)
 {
     printf("%s starting...\n", sampleName);
@@ -370,7 +371,9 @@ int main(int argc, char **argv)
     {
       char *p;
       pad_size = strtol(argv[1],&p,10);
-      strlcpy(&imageFilename[0], argv[2], 20);
+      type = (kernel_type)strtol(argv[2],&p,10);
+      printf("Kernel type %d\n",type);
+      strlcpy(&imageFilename[0], argv[3], 20);
 
 #if 0
         if (checkCmdLineFlag(argc, (const char **) argv, "input"))
@@ -451,7 +454,7 @@ void runTest(int argc, char **argv)
 
 ////////////////////////////// Generate Kernel ////////////////////////////////////////////////////
     int kernel_dim = (2 * pad_size) + 1;
-    kernel_type type = AVERAGE; 
+    /*kernel_type type = AVERAGE; */
     float *hKernel = (float *)malloc(kernel_dim*kernel_dim * sizeof(int));
     generateKernel(hKernel, kernel_dim, type);
 ////////////////////////////// Generate Kernel Complete //////////////////////////////////////////
