@@ -5,10 +5,10 @@ CC=gcc
 NVCC=nvcc
 CCFLAGS=-g -Wall
 
-all: assignment2
+all: nbody
 
-assignment2: assignment2.cu
-	$(NVCC) $(NVCCFLAGS) assignment2.cu -o assignment2
+nbody: nbody.cu
+	$(NVCC) $(NVCCFLAGS) nbody.cu -o nbody
 
 clean:
-	rm assignment2
+	rm nbody
