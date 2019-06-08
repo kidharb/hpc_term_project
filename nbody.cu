@@ -54,8 +54,6 @@ __device__ float totalFy = 0;
 
 __global__ void nBodyAcceleration(int bodyIindex, Body bodies[])
 {
-  /*printf("Body I [%e %e %e %e %e]\n", BodyI->mass, BodyI->px, BodyI->py, BodyI->vx, BodyI->vy);
-  printf("Body J [%e %e %e %e %e]\n", BodyJ->mass, BodyJ->px, BodyJ->py, BodyJ->vx, BodyJ->vy);*/
   Force myForce;
 
   int myid = threadIdx.x + blockDim.x * blockIdx.x;
@@ -63,12 +61,12 @@ __global__ void nBodyAcceleration(int bodyIindex, Body bodies[])
 
   if (myid != bodyIindex)
   {
-  float dx = (bodies[bodyIindex].px-bodies[myid].px);
-  float dy = (bodies[bodyIindex].py-bodies[myid].py);
-  float d = sqrt(dx*dx + dy*dy);
-  float f = G * bodies[bodyIindex].mass * bodies[myid].mass / (d*d);
+  double dx = (bodies[bodyIindex].px-bodies[myid].px);
+  double dy = (bodies[bodyIindex].py-bodies[myid].py);
+  double d = sqrt(dx*dx + dy*dy);
+  double f = G * bodies[bodyIindex].mass * bodies[myid].mass / (d*d);
 
-  float theta = atan2(dy, dx);
+  double theta = atan2(dy, dx);
   myForce.fx = cos(theta) * f;
   myForce.fy = sin(theta) * f;
   printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);
@@ -77,120 +75,41 @@ __global__ void nBodyAcceleration(int bodyIindex, Body bodies[])
   /*totalFx += myForce.fx;*/
   /*totalFy += myForce.fy;*/
   __syncthreads();
-  printf("[%s] total fx, total fy = [%e, %e]\n",bodies[bodyIindex].name, totalFx, totalFy);
+  if (tid == 0)
+    printf("Cuda [%s] total fx, total fy = [%e, %e]\n\n",bodies[bodyIindex].name, totalFx, totalFy);
   }
 }
-__global__ void parallelConvolutionShared(float *inputData,
-                                                int width,
-                                                int height,
-                                                float* kernel,
-                                                int pad_size,
-                                                float *outputData)
+
+////////////////////////////////////////////////////////////////////////////////
+//! Serial nBody  on CPU
+////////////////////////////////////////////////////////////////////////////////
+void serialNbody(int bodyIindex,
+                 Body bodies[],
+                 int num_steps)
 {
-  int col = threadIdx.x + blockDim.x * blockIdx.x;
-  int row = threadIdx.y + blockDim.y * blockIdx.y;
+  Force myForce;
+  double Fx = 0;
+  double Fy = 0;
 
-  if ((row > width) || (col > height))
-    return;
-  // Declare a square matrix of tile size in shared memory
-  __shared__ float input[TILE_SIZE][TILE_SIZE];
-
-  int kernel_dim = (2 * pad_size) + 1;
-  
-  for (int k = 0; k < (((width - 1)/ TILE_SIZE) + 1); k++)
+  for (int myid = 0; myid < NUM_BODIES; myid++)
   {
-    // Make sure we are within the bound of the tile
-    if ((row < height) && ((threadIdx.x + (k * TILE_SIZE)) < width))
+    if (myid != bodyIindex)
     {
-      // Copy the global memory to shared memory
-      input[threadIdx.y][threadIdx.x] = inputData[(row*width) + threadIdx.x + (k*TILE_SIZE)];
-    }
-    else
-    {
-        input[threadIdx.y][threadIdx.x] = 0.0;
-    }
-    /*__syncthreads();*/
-
-    float sum = 0.0; 
-    for (int i = 0; i < kernel_dim; i++)
-    {
-      for (int j = 0; j < kernel_dim; j++)
-      {
-        // Do the convolution
-        sum += input[row + i][col + j] * kernel[(i * kernel_dim) + j]; 
-      }
-    }
-    outputData[(row * width) + col] = sum;
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//! Parallel convolution on GPU using global memory
-////////////////////////////////////////////////////////////////////////////////
-__global__ void parallelConvolutionGlobal(float *inputData,
-                                          int width,
-                                          int height,
-                                          float* kernel,
-                                          int kernel_dim,
-                                          float *outputData)
-{
-  int x = threadIdx.x + blockDim.x * blockIdx.x;
-  int y = threadIdx.y + blockDim.y * blockIdx.y;
-  
-  if ((x > width) || (y > height))
-    return;
-
-  float sum =0.0;
-  // loop over the kernel
-  for (int i = 0; i < kernel_dim; i++)
-  {
-    for (int j = 0; j < kernel_dim; j++)
-    {
-      // Do the convolution
-      sum += inputData[(x + i)*width + (y + j)] * kernel[(i * kernel_dim) + j]; 
+      double dx = (bodies[bodyIindex].px-bodies[myid].px);
+      double dy = (bodies[bodyIindex].py-bodies[myid].py);
+      double d = sqrt(dx*dx + dy*dy);
+      double f = G * bodies[bodyIindex].mass * bodies[myid].mass / (d*d);
+     
+      double theta = atan2(dy, dx);
+      myForce.fx = cos(theta) * f;
+      myForce.fy = sin(theta) * f;
+      printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);
+      Fx += myForce.fx;
+      Fy += myForce.fy;
     }
   }
-  outputData[(x * width) + y] = sum;
+  printf("Serial [%s] total fx, total fy = [%e, %e]\n",bodies[bodyIindex].name, Fx, Fy);
 }
-
-////////////////////////////////////////////////////////////////////////////////
-//! Serial convolution on CPU
-////////////////////////////////////////////////////////////////////////////////
-void serialConvolutionCPU(float *inputData,
-                                int width,
-                                int height,
-                                float* kernel,
-                                int kernel_dim,
-                                float *outputData)
-{
-  // loop over the input image
-  for (int i = 0; i < width; i++)
-  {
-    for (int j = 0; j < height; j++)
-    {
-      float sum =0.0;
-      // loop over the kernel
-      for (int x = 0; x < kernel_dim; x++)
-      {
-        for (int y = 0; y < kernel_dim; y++)
-        {
-          // Do the convolution
-          sum += inputData[(x + i)*width + (y + j)] * kernel[(x * kernel_dim) + y]; 
-        }
-      }
-      outputData[(i * width) + j] = sum;
-    }
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Declaration, forward
-void runTest(int argc, char **argv);
-void serialTransformCPU(float *inputData,
-                                int width,
-                                int height,
-                                int *outputData);
-
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -226,8 +145,8 @@ int main(int argc, char **argv)
     bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
 
     sprintf(sun.name, "%s", "sun");
-    /*sun.mass = 1.98892 * pow(10,30);*/
-    sun.mass = 1.98892 * pow(10,24);
+    sun.mass = 1.98892 * pow(10,30);
+    /*sun.mass = 1.98892 * pow(10,24);*/
     sun.px = 0;
     sun.py = 0;
     sun.vx = 0;
@@ -269,6 +188,7 @@ int main(int argc, char **argv)
     //checkCudaErrors(cudaFree(d_sun));
     checkCudaErrors(cudaDeviceSynchronize());
     cudaDeviceReset();
+    serialNbody(d_body, bodies, 1);
 
     printf("completed, returned %s\n",
            testResult ? "OK" : "ERROR!");
