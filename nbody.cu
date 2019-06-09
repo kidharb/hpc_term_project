@@ -24,6 +24,7 @@ using namespace std;
 #define AU  (149.6e6 * 1000)     // 149.6 million km, in meters.
 #define SCALE  (250 / AU)
 #define NUM_BODIES 3
+#define NUM_STEPS 360
 
 typedef struct {
     char name[20];
@@ -52,8 +53,7 @@ bool testResult = true;
 __device__ float totalFx = 0;
 __device__ float totalFy = 0;
 
-__global__ void nBodyAcceleration(int bodyIindex, 
-                                  Body bodies[], 
+__global__ void nBodyAcceleration( Body bodies[], 
                                   int timestep)
 {
   Force myForce;
@@ -61,7 +61,7 @@ __global__ void nBodyAcceleration(int bodyIindex,
   int myid = threadIdx.x + blockDim.x * blockIdx.x;
   int tid = threadIdx.x;
 
-  for (bodyIindex = 0; bodyIindex < NUM_BODIES; bodyIindex++)
+  for (int bodyIindex = 0; bodyIindex < NUM_BODIES; bodyIindex++)
   {
     if (myid != bodyIindex)
     {
@@ -77,8 +77,8 @@ __global__ void nBodyAcceleration(int bodyIindex,
   
       atomicAdd(&totalFx, myForce.fx);
       atomicAdd(&totalFy, myForce.fy);
-      __syncthreads();
     }
+    __syncthreads();
   
     if (tid == bodyIindex)
     {
@@ -86,51 +86,58 @@ __global__ void nBodyAcceleration(int bodyIindex,
       bodies[bodyIindex].vy += totalFy / bodies[bodyIindex].mass * timestep;
       bodies[bodyIindex].px += bodies[bodyIindex].vx * timestep;
       bodies[bodyIindex].py += bodies[bodyIindex].vy * timestep;
-      printf("Cuda [%s] Total fx, Total fy = [%e, %e]\n",bodies[bodyIindex].name, totalFx, totalFy);
-      printf("Cuda [%s] Updated vx, Updated vy = [%e, %e]\n",bodies[bodyIindex].name, bodies[bodyIindex].vx, bodies[bodyIindex].vy);
-      printf("Cuda [%s] Updated px, Updated py = [%e, %e]\n\n",bodies[bodyIindex].name, bodies[bodyIindex].px/AU, bodies[bodyIindex].py/AU);
+      /*printf("Cuda [%s] Total fx, Total fy = [%e, %e]\n",bodies[bodyIindex].name, totalFx, totalFy);*/
+      /*printf("Cuda [%s] Updated vx, Updated vy = [%e, %e]\n",bodies[bodyIindex].name, bodies[bodyIindex].vx, bodies[bodyIindex].vy);*/
+      //printf("Cuda [%s] [%e, %e, %e, %e]\n",bodies[bodyIindex].name, bodies[bodyIindex].px/AU, bodies[bodyIindex].py/AU, bodies[bodyIindex].vx, bodies[bodyIindex].vy);
     }
   }
+  /*printf("\n");*/
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 //! Serial nBody  on CPU
 ////////////////////////////////////////////////////////////////////////////////
-void serialNbody(int bodyIindex,
-                 Body bodies[],
+void serialNbody(Body bodies[],
                  int timestep)
 {
   Force myForce;
-  double Fx = 0;
-  double Fy = 0;
+  double Fx[NUM_BODIES], Fy[NUM_BODIES], dx, dy, d, f, theta;
 
-  for (bodyIindex = 0; bodyIindex < NUM_BODIES; bodyIindex++)
+  for (int bodyIindex = 0; bodyIindex < NUM_BODIES; bodyIindex++)
   {
+    printf("Serial %s \t%f, \t%f, \t%f, \t%f\n",bodies[bodyIindex].name, bodies[bodyIindex].px/AU, bodies[bodyIindex].py/AU, bodies[bodyIindex].vx, bodies[bodyIindex].vy);
+    Fx[bodyIindex] = 0;
+    Fy[bodyIindex] = 0;
     for (int myid = 0; myid < NUM_BODIES; myid++)
     {
-      if (myid != bodyIindex)
-      {
-        double dx = (bodies[bodyIindex].px-bodies[myid].px);
-        double dy = (bodies[bodyIindex].py-bodies[myid].py);
-        double d = sqrt(dx*dx + dy*dy);
-        double f = G * bodies[bodyIindex].mass * bodies[myid].mass / (d*d);
-       
-        double theta = atan2(dy, dx);
-        myForce.fx = cos(theta) * f;
-        myForce.fy = sin(theta) * f;
-        /*printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);*/
-        Fx += myForce.fx;
-        Fy += myForce.fy;
-      }
+      /* Do not calculate attraction to myself */
+      if (myid == bodyIindex)
+        continue;
+
+      dx = (bodies[myid].px-bodies[bodyIindex].px);
+      dy = (bodies[myid].py-bodies[bodyIindex].py);
+      d = sqrt(dx*dx + dy*dy);
+      f = G * bodies[bodyIindex].mass * bodies[myid].mass / (d*d);
+      
+      theta = atan2(dy, dx);
+      myForce.fx = cos(theta) * f;
+      myForce.fy = sin(theta) * f;
+      Fx[bodyIindex] += myForce.fx;
+      Fy[bodyIindex] += myForce.fy;
+      /*printf("[%s %s] partial fx, partial fy = [%e, %e]\n",bodies[myid].name, bodies[bodyIindex].name, Fx[bodyIindex], Fy[bodyIindex]);*/
     }
-    bodies[bodyIindex].vx += Fx / bodies[bodyIindex].mass * timestep;
-    bodies[bodyIindex].vy += Fy / bodies[bodyIindex].mass * timestep;
+  }
+  for (int bodyIindex = 0; bodyIindex < NUM_BODIES; bodyIindex++)
+  {
+    /*printf("[%s] Total fx, Total fy = [%e, %e]\n",bodies[bodyIindex].name, Fx[bodyIindex], Fy[bodyIindex]);*/
+    bodies[bodyIindex].vx += Fx[bodyIindex] / bodies[bodyIindex].mass * timestep;
+    bodies[bodyIindex].vy += Fy[bodyIindex] / bodies[bodyIindex].mass * timestep;
     bodies[bodyIindex].px += bodies[bodyIindex].vx * timestep;
     bodies[bodyIindex].py += bodies[bodyIindex].vy * timestep;
-    printf("Serial [%s] Total Fx, Total Fy = [%e, %e]\n",bodies[bodyIindex].name, Fx, Fy);
-    printf("Serial [%s] Updated vx, Updated vy = [%e, %e]\n",bodies[bodyIindex].name, bodies[bodyIindex].vx, bodies[bodyIindex].vy);
-    printf("Serial [%s] Updated px, Updated py = [%e, %e]\n\n",bodies[bodyIindex].name, bodies[bodyIindex].px/AU, bodies[bodyIindex].py/AU);
+    /*printf("Serial [%s] Total Fx, Total Fy = [%e, %e]\n",bodies[bodyIindex].name, Fx, Fy);*/
+    /*printf("Serial [%s] Updated vx, Updated vy = [%e, %e]\n",bodies[bodyIindex].name, bodies[bodyIindex].vx, bodies[bodyIindex].vy);*/
   }
+  printf("\n");
 }
 
 
@@ -203,10 +210,11 @@ int main(int argc, char **argv)
     // Allocate output device memory
     dim3 dimBlock(NUM_BODIES, 1, 1);
     dim3 dimGrid(1, 1, 1);
-    for (int body = 1; body < 2; body++)
+    for (int step = 1; step < NUM_STEPS; step++)
     {
-      nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(body, d_bodies, timestep);
-      serialNbody(body, bodies, timestep);
+      printf("Step #%d\n",step);
+      nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, timestep);
+      serialNbody(bodies, timestep);
     }
 
     checkCudaErrors(cudaFree(d_bodies));
