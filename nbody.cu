@@ -52,7 +52,9 @@ bool testResult = true;
 __device__ float totalFx = 0;
 __device__ float totalFy = 0;
 
-__global__ void nBodyAcceleration(int bodyIindex, Body bodies[])
+__global__ void nBodyAcceleration(int bodyIindex, 
+                                  Body bodies[], 
+                                  int timestep)
 {
   Force myForce;
 
@@ -61,22 +63,30 @@ __global__ void nBodyAcceleration(int bodyIindex, Body bodies[])
 
   if (myid != bodyIindex)
   {
-  double dx = (bodies[bodyIindex].px-bodies[myid].px);
-  double dy = (bodies[bodyIindex].py-bodies[myid].py);
-  double d = sqrt(dx*dx + dy*dy);
-  double f = G * bodies[bodyIindex].mass * bodies[myid].mass / (d*d);
+    double dx = (bodies[bodyIindex].px-bodies[myid].px);
+    double dy = (bodies[bodyIindex].py-bodies[myid].py);
+    double d = sqrt(dx*dx + dy*dy);
+    double f = G * bodies[bodyIindex].mass * bodies[myid].mass / (d*d);
 
-  double theta = atan2(dy, dx);
-  myForce.fx = cos(theta) * f;
-  myForce.fy = sin(theta) * f;
-  printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);
-  atomicAdd(&totalFx, myForce.fx);
-  atomicAdd(&totalFy, myForce.fy);
-  /*totalFx += myForce.fx;*/
-  /*totalFy += myForce.fy;*/
-  __syncthreads();
+    double theta = atan2(dy, dx);
+    myForce.fx = cos(theta) * f;
+    myForce.fy = sin(theta) * f;
+    /*printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);*/
+
+    atomicAdd(&totalFx, myForce.fx);
+    atomicAdd(&totalFy, myForce.fy);
+    __syncthreads();
+  }
+
   if (tid == 0)
-    printf("Cuda [%s] total fx, total fy = [%e, %e]\n\n",bodies[bodyIindex].name, totalFx, totalFy);
+  {
+    bodies[bodyIindex].vx += totalFx / bodies[bodyIindex].mass * timestep;
+    bodies[bodyIindex].vy += totalFy / bodies[bodyIindex].mass * timestep;
+    bodies[bodyIindex].px += bodies[bodyIindex].vx * timestep;
+    bodies[bodyIindex].py += bodies[bodyIindex].vy * timestep;
+    printf("Cuda [%s] Total fx, Total fy = [%e, %e]\n",bodies[bodyIindex].name, totalFx, totalFy);
+    printf("Cuda [%s] Updated vx, Updated vy = [%e, %e]\n",bodies[bodyIindex].name, bodies[bodyIindex].vx, bodies[bodyIindex].vy);
+    printf("Cuda [%s] Updated px, Updated py = [%e, %e]\n\n",bodies[bodyIindex].name, bodies[bodyIindex].px/AU, bodies[bodyIindex].py/AU);
   }
 }
 
@@ -85,7 +95,7 @@ __global__ void nBodyAcceleration(int bodyIindex, Body bodies[])
 ////////////////////////////////////////////////////////////////////////////////
 void serialNbody(int bodyIindex,
                  Body bodies[],
-                 int num_steps)
+                 int timestep)
 {
   Force myForce;
   double Fx = 0;
@@ -103,12 +113,19 @@ void serialNbody(int bodyIindex,
       double theta = atan2(dy, dx);
       myForce.fx = cos(theta) * f;
       myForce.fy = sin(theta) * f;
-      printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);
+      /*printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);*/
       Fx += myForce.fx;
       Fy += myForce.fy;
     }
   }
-  printf("Serial [%s] total fx, total fy = [%e, %e]\n",bodies[bodyIindex].name, Fx, Fy);
+  bodies[bodyIindex].vx += Fx / bodies[bodyIindex].mass * timestep;
+  bodies[bodyIindex].vy += Fy / bodies[bodyIindex].mass * timestep;
+  bodies[bodyIindex].px += bodies[bodyIindex].vx * timestep;
+  bodies[bodyIindex].py += bodies[bodyIindex].vy * timestep;
+
+  printf("Serial [%s] Total Fx, Total Fy = [%e, %e]\n",bodies[bodyIindex].name, Fx, Fy);
+  printf("Serial [%s] Updated vx, Updated vy = [%e, %e]\n",bodies[bodyIindex].name, bodies[bodyIindex].vx, bodies[bodyIindex].vy);
+  printf("Serial [%s] Updated px, Updated py = [%e, %e]\n",bodies[bodyIindex].name, bodies[bodyIindex].px/AU, bodies[bodyIindex].py/AU);
 }
 
 
@@ -182,13 +199,13 @@ int main(int argc, char **argv)
     // Allocate output device memory
     dim3 dimBlock(NUM_BODIES, 1, 1);
     dim3 dimGrid(1, 1, 1);
-    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_body, d_bodies);
+    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_body, d_bodies, timestep);
 
     //checkCudaErrors(cudaFree(d_earth));
     //checkCudaErrors(cudaFree(d_sun));
     checkCudaErrors(cudaDeviceSynchronize());
     cudaDeviceReset();
-    serialNbody(d_body, bodies, 1);
+    serialNbody(d_body, bodies, timestep);
 
     printf("completed, returned %s\n",
            testResult ? "OK" : "ERROR!");
