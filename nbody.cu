@@ -24,7 +24,7 @@ using namespace std;
 #define AU  (149.6e6 * 1000)     // 149.6 million km, in meters.
 #define SCALE  (250 / AU)
 #define NUM_BODIES 3
-#define NUM_STEPS 180
+#define NUM_STEPS 18000
 #define TIMESTEP 24*3600
 
 typedef struct {
@@ -116,9 +116,9 @@ void serialNbody(Body bodies[],
   Force myForce;
   double Fx[NUM_BODIES], Fy[NUM_BODIES], dx, dy, d, f, theta;
 
+  printf("Step #%d\n",step);
   for (int bodyIindex = 0; bodyIindex < NUM_BODIES; bodyIindex++)
   {
-    printf("Step #%d\n",step);
     printf("Serial %s \t%f, \t%f, \t%f, \t%f\n",bodies[bodyIindex].name, bodies[bodyIindex].px/AU, bodies[bodyIindex].py/AU, bodies[bodyIindex].vx, bodies[bodyIindex].vy);
     Fx[bodyIindex] = 0;
     Fy[bodyIindex] = 0;
@@ -224,8 +224,8 @@ int main(int argc, char **argv)
     dim3 dimGrid(1, 1, 1);
     for (int step = 1; step < NUM_STEPS; step++)
     {
-      nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, step);
-      //serialNbody(bodies, step);
+      //nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, step);
+      serialNbody(bodies, step);
     }
 
     checkCudaErrors(cudaFree(d_bodies));
