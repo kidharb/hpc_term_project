@@ -7,8 +7,9 @@
 // Assumed scale: 100 pixels = 1AU.
 #define AU  (149.6e6 * 1000)     // 149.6 million km, in meters.
 #define SCALE  (250 / AU)
-#define NUM_ROCKETS 1600
+#define NUM_ROCKETS 1200
 #define NUM_TYPES 6
+#define NUM_STEPS 5
 
 //extern "C" nbdoy_cuda();
 void nbody_cuda();
@@ -24,7 +25,7 @@ typedef struct {
 
 int main(int argc, char** argv) {
     // Initialize the MPI environment
-    int message = 10;
+    int step = 0;
 
     MPI_Status status;
     Body planets[8];
@@ -67,10 +68,10 @@ int main(int argc, char** argv) {
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
-
+    printf("Thread %d reporting\n",world_rank);
     if (world_rank == 0)
     {
-      /*while (message)*/
+      while (step++ < NUM_STEPS)
       {
         sprintf(planets[0].name, "%s", "earth");
         planets[0].mass = 5.9742 * pow(10,24);
@@ -79,21 +80,21 @@ int main(int argc, char** argv) {
         planets[0].vx = 0;
         planets[0].vy = 29.783*1000;            // 29.783 km/sec
         MPI_Bcast(&planets[0], 1, planettype, 0, MPI_COMM_WORLD);
-        printf("Sent planet info for '%s' to everyone\n", planets[0].name);
+        printf("Step #%d Sent planet info for '%s' to everyone\n", step, planets[0].name);
         /*message--;*/
       }
     }
     else
     {
-      /*while (message != 1) */
+      while (step++ < NUM_STEPS)
       {
         MPI_Bcast(&planets[0], 1, planettype, 0, MPI_COMM_WORLD);
-        printf("received planet name %s from Process 0\n",planets[0].name);
-        printf("received planet mass %e from Process 0\n",planets[0].mass);
-        printf("received planet px %e from Process 0\n",planets[0].px);
-        printf("received planet py %e from Process 0\n",planets[0].py);
-        printf("received planet vx %e from Process 0\n",planets[0].vx);
-        printf("received planet vy %e from Process 0\n",planets[0].vy);
+        printf("Step #%d received planet name %s from Process 0\n",step, planets[0].name);
+        printf("Step #%d received planet mass %e from Process 0\n",step, planets[0].mass);
+        printf("Step #%d received planet px %e from Process 0\n",step, planets[0].px);
+        printf("Step #%d received planet py %e from Process 0\n",step, planets[0].py);
+        printf("Step #%d received planet vx %e from Process 0\n",step, planets[0].vx);
+        printf("Step #%d received planet vy %e from Process 0\n",step, planets[0].vy);
       }
     }
     printf("Process %d terminated\n",world_rank);

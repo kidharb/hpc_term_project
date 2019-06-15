@@ -2,7 +2,7 @@
 # specify a partition
 #SBATCH -p ha
 # specify number of nodes
-#SBATCH -N 4
+#SBATCH -N 8
 # specify number of cores
 #SBATCH -n 8
 # specify memory pool for all cores
@@ -16,6 +16,9 @@
 #SBATCH -o /home-mscluster/kbachan/slurm_%N.out
 # specify the filename for stderr
 #SBATCH -e /home-mscluster/kbachan/slurm_%N.err
+# Just one MPI task per node
+#SBATCH --ntasks-per-node=1 ### Number of tasks (MPI processes)
+
 
 echo ------------------------------------------------------
 echo -n 'Job is running on node ' $SLURM_JOB_NODELIST
@@ -28,7 +31,4 @@ echo SLURM: number of cores is $SLURM_NTASKS
 echo SLURM: job name is $SLURM_JOB_NAME
 echo ------------------------------------------------------
 cd $SLURM_SUBMIT_DIR
-#make clean
-#make
-#mpicc -o mpi_mat_vect_mult mpi_mat_vect_mult.c
-mpiexec -n 2 ./nbody
+mpiexec -np $SLURM_NTASKS ./nbody
