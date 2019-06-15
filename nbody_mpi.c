@@ -7,6 +7,43 @@
 
 void nbody_cuda(Body *, int);
 
+void nbody_init_rockets(Body *bodies)
+{
+    int rockets;
+    double vx=0,vr,vy=0;
+    double vx_arr[NUM_ROCKETS];
+    double vy_arr[NUM_ROCKETS];
+
+    vr = 46 * 1000; //46 km/s
+
+    for (int i = 0; i < NUM_ROCKETS; i+=4)
+    {
+      vx += vr / NUM_ROCKETS * 4;
+      vy = sqrt(pow(vr,2) - pow(vx,2) + 0.000000001);
+      vx_arr[i] = vx;
+      vy_arr[i] = vy;
+
+      vx_arr[1+i] = vx;
+      vy_arr[1+i] = -vy;
+
+      vx_arr[2+i] = -vx;
+      vy_arr[2+i] = vy;
+
+      vx_arr[3+i] = -vx;
+      vy_arr[3+i] = -vy;
+    }
+
+    for (int k = 0; k < NUM_ROCKETS; k++)
+    {
+      sprintf(bodies[k].name, "Body %d", k);
+      bodies[k].mass = 1 * pow(10,3);
+      bodies[k].px = -1 * AU + k;
+      bodies[k].py = k;
+      bodies[k].vx = vx_arr[k];
+      bodies[k].vy = vy_arr[k];
+      printf("Body %d \t%f \t%f \t%f \t%f \t%f\n",k, bodies[k].name, bodies[k].px/AU, bodies[k].py/AU, bodies[k].vx, bodies[k].vy);
+    }
+}
 void nbody_init_planets(Body *bodies)
 {
     Body earth, sun, venus;
@@ -51,10 +88,6 @@ int main(int argc, char** argv) {
     MPI_Aint array_of_displacements[NUM_TYPES];
     MPI_Aint name_addr, mass_addr, px_addr, py_addr, vx_addr, vy_addr;
 
-    /* setup planets */
-    /* Allocate memory for the planets */
-    bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
-    nbody_init_planets(bodies);
 
     /* Init MPI */
     MPI_Init(NULL, NULL);
@@ -92,6 +125,10 @@ int main(int argc, char** argv) {
     printf("Thread %d reporting\n",world_rank);
     if (world_rank == 0)
     {
+      /* setup planets */
+      /* Allocate memory for the planets */
+      bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
+      nbody_init_planets(bodies);
       while (step++ < NUM_STEPS)
       {
 	/* Update planets positions */
@@ -102,6 +139,8 @@ int main(int argc, char** argv) {
     }
     else
     {
+      bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
+      nbody_init_rockets(bodies);
       while (step++ < NUM_STEPS)
       {
         MPI_Bcast(bodies, 3, planettype, 0, MPI_COMM_WORLD);

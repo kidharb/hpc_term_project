@@ -146,13 +146,13 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
 ////////////////////////////////////////////////////////////////////////////////
 /*int main(int argc, char **argv)*/
 //extern "C" void nbody_cuda()
-void nbody_cuda(Body *bodies, int step)
+void nbody_cuda(Body *planets, int step)
 {
     Body *d_bodies;
 
     checkCudaErrors(cudaMalloc((void **) &d_bodies, NUM_BODIES * sizeof(Body)));
     checkCudaErrors(cudaMemcpy(d_bodies,
-                               bodies,
+                               planets,
                                NUM_BODIES * sizeof(Body),
                                cudaMemcpyHostToDevice));
 
@@ -164,7 +164,7 @@ void nbody_cuda(Body *bodies, int step)
       nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, step);
       /*serialNbody(bodies, step);*/
     }
-    checkCudaErrors(cudaMemcpy(bodies,
+    checkCudaErrors(cudaMemcpy(planets,
                                d_bodies,
                                NUM_BODIES * sizeof(Body),
                                cudaMemcpyDeviceToHost));
