@@ -4,7 +4,7 @@
 # specify number of nodes
 #SBATCH -N 8
 # specify number of cores
-#SBATCH -n 1
+#SBATCH -n 8
 # specify memory pool for all cores
 ##SBATCH --mem 1
 # specify the wall clock time limit for the job

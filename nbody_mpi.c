@@ -5,9 +5,9 @@
 #include <math.h>
 #include "nbody.h"
 
-void nbody_cuda(Body *);
+void nbody_cuda(Body *, int);
 
-void nbody_init_data(Body *bodies)
+void nbody_init_planets(Body *bodies)
 {
     Body earth, sun, venus;
 
@@ -43,7 +43,8 @@ int main(int argc, char** argv) {
     int step = 0;
 
     MPI_Status status;
-    Body planets[8];
+    Body *bodies;
+    Body planets;
     MPI_Datatype planettype;
     MPI_Datatype type[NUM_TYPES] = { MPI_CHAR, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE };
     int blocklen[NUM_TYPES] = { 20, 1, 1, 1, 1, 1 };
@@ -51,21 +52,20 @@ int main(int argc, char** argv) {
     MPI_Aint name_addr, mass_addr, px_addr, py_addr, vx_addr, vy_addr;
 
     /* setup planets */
-    Body *bodies;
     /* Allocate memory for the planets */
     bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
-    nbody_init_data(bodies);
+    nbody_init_planets(bodies);
 
     /* Init MPI */
     MPI_Init(NULL, NULL);
 
     /* Create our user defined data structure for the planets to make communication easier, later */
-    MPI_Get_address(&planets[0].name, &name_addr);
-    MPI_Get_address(&planets[0].mass, &mass_addr);
-    MPI_Get_address(&planets[0].px, &px_addr);
-    MPI_Get_address(&planets[0].py, &py_addr);
-    MPI_Get_address(&planets[0].vx, &vx_addr);
-    MPI_Get_address(&planets[0].vy, &vy_addr);
+    MPI_Get_address(&planets.name, &name_addr);
+    MPI_Get_address(&planets.mass, &mass_addr);
+    MPI_Get_address(&planets.px, &px_addr);
+    MPI_Get_address(&planets.py, &py_addr);
+    MPI_Get_address(&planets.vx, &vx_addr);
+    MPI_Get_address(&planets.vy, &vy_addr);
 
     array_of_displacements[0] = 0;
     array_of_displacements[1] = mass_addr - name_addr;
@@ -94,14 +94,9 @@ int main(int argc, char** argv) {
     {
       while (step++ < NUM_STEPS)
       {
-        sprintf(planets[0].name, "%s", "earth");
-        planets[0].mass = 5.9742 * pow(10,24);
-        planets[0].px = -1*AU;
-        planets[0].py = 0;
-        planets[0].vx = 0;
-        planets[0].vy = 29.783*1000;            // 29.783 km/sec
-        MPI_Bcast(&planets[0], 1, planettype, 0, MPI_COMM_WORLD);
-        printf("Step #%d Sent planet info for '%s' to everyone\n", step, planets[0].name);
+	/* Update planets positions */
+    	nbody_cuda(bodies, step);
+        MPI_Bcast(bodies, 3, planettype, 0, MPI_COMM_WORLD);
         /*message--;*/
       }
     }
@@ -109,18 +104,12 @@ int main(int argc, char** argv) {
     {
       while (step++ < NUM_STEPS)
       {
-        MPI_Bcast(&planets[0], 1, planettype, 0, MPI_COMM_WORLD);
-        printf("Step #%d received planet name %s from Process 0\n",step, planets[0].name);
-        printf("Step #%d received planet mass %e from Process 0\n",step, planets[0].mass);
-        printf("Step #%d received planet px %e from Process 0\n",step, planets[0].px);
-        printf("Step #%d received planet py %e from Process 0\n",step, planets[0].py);
-        printf("Step #%d received planet vx %e from Process 0\n",step, planets[0].vx);
-        printf("Step #%d received planet vy %e from Process 0\n",step, planets[0].vy);
+        MPI_Bcast(bodies, 3, planettype, 0, MPI_COMM_WORLD);
+        printf("MPI[%d] %s \t%f, \t%f, \t%f, \t%f\n",world_rank, bodies[1].name, bodies[1].px/AU, bodies[1].py/AU, bodies[1].vx, bodies[1].vy);
       }
     }
     // Finalize the MPI environment.
+    free(bodies);
     MPI_Type_free(&planettype);
     MPI_Finalize();
-    printf("Nbody Cuda call\n");
-    nbody_cuda(bodies);
 }

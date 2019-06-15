@@ -146,9 +146,8 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
 ////////////////////////////////////////////////////////////////////////////////
 /*int main(int argc, char **argv)*/
 //extern "C" void nbody_cuda()
-void nbody_cuda(Body *bodies)
+void nbody_cuda(Body *bodies, int step)
 {
-    printf("Cuda Starting...\n");
     Body *d_bodies;
 
     checkCudaErrors(cudaMalloc((void **) &d_bodies, NUM_BODIES * sizeof(Body)));
@@ -160,20 +159,18 @@ void nbody_cuda(Body *bodies)
     // Allocate output device memory
     dim3 dimBlock(NUM_BODIES, 1, 1);
     dim3 dimGrid(1, 1, 1);
-    for (int step = 1; step < NUM_STEPS; step++)
+    //for (int step = 1; step < NUM_STEPS; step++)
     {
       nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, step);
       /*serialNbody(bodies, step);*/
     }
+    checkCudaErrors(cudaMemcpy(bodies,
+                               d_bodies,
+                               NUM_BODIES * sizeof(Body),
+                               cudaMemcpyDeviceToHost));
 
     checkCudaErrors(cudaFree(d_bodies));
-    free(bodies);
-    //checkCudaErrors(cudaFree(d_sun));
     checkCudaErrors(cudaDeviceSynchronize());
     cudaDeviceReset();
-
-    printf("completed, returned %s\n",
-           testResult ? "OK" : "ERROR!");
-    exit(testResult ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
