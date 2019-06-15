@@ -204,7 +204,8 @@ void nbody_init_data(Body *bodies)
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
 /*int main(int argc, char **argv)*/
-extern "C" void nbody_cuda()
+//extern "C" void nbody_cuda()
+void nbody_cuda()
 {
     printf("Cuda Starting...\n");
 
@@ -219,7 +220,7 @@ extern "C" void nbody_cuda()
 
 		// Allocate input device memory
     checkCudaErrors(cudaMalloc((void **) &d_bodies, NUM_BODIES * sizeof(Body)));
-		checkCudaErrors(cudaMemcpy(d_bodies,
+    checkCudaErrors(cudaMemcpy(d_bodies,
                                &bodies[0],
                                NUM_BODIES * sizeof(Body),
                                cudaMemcpyHostToDevice));

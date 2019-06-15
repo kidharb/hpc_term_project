@@ -10,7 +10,7 @@
 #define NUM_ROCKETS 1600
 #define NUM_TYPES 6
 
-/*extern "C" nbdoy_cuda()*/
+//extern "C" nbdoy_cuda();
 void nbody_cuda();
 
 typedef struct {
