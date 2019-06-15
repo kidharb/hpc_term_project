@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-using namespace std;
 
 // Includes CUDA
 #include <cuda_runtime.h>
@@ -110,6 +109,7 @@ __global__ void nBodyAcceleration(Body bodies[],
 ////////////////////////////////////////////////////////////////////////////////
 //! Serial nBody  on CPU
 ////////////////////////////////////////////////////////////////////////////////
+#ifdef MAC
 void serialNbody(Body bodies[],
                  int step)
 {
@@ -153,6 +153,7 @@ void serialNbody(Body bodies[],
   }
   printf("\n");
 }
+#endif
 
 
 ////////////////////////////////////////////////////////////////////////////////
