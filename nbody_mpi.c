@@ -10,6 +10,9 @@
 #define NUM_ROCKETS 1600
 #define NUM_TYPES 6
 
+/*extern "C" nbdoy_cuda()*/
+void nbody_cuda();
+
 typedef struct {
   char name[20];
   double mass;
@@ -22,8 +25,7 @@ typedef struct {
 int main(int argc, char** argv) {
     // Initialize the MPI environment
     int message = 10;
-#define MPI
-#ifdef MPI
+
     MPI_Status status;
     Body planets[8];
     MPI_Datatype planettype;
@@ -99,48 +101,6 @@ int main(int argc, char** argv) {
     // Finalize the MPI environment.
     MPI_Type_free(&planettype);
     MPI_Finalize();
-#else
-
-    Body rocket, sun, venus;
-    Body *bodies;
-    Body *d_bodies;
-
-
-    bodies = (Body *)malloc(NUM_ROCKETS * sizeof(Body));
-
-    int rockets;
-    double vx=0,vr,vy=0;
-    double vx_arr[NUM_ROCKETS];
-    double vy_arr[NUM_ROCKETS];
-
-    vr = 46 * 1000; // 46 km/sec
-
-    for (int i = 0; i < NUM_ROCKETS; i+=4)
-    {
-      vx += vr / NUM_ROCKETS * 4;
-      vy = sqrt(pow(vr,2) - pow(vx,2) + 0.000000001);
-      vx_arr[i] = vx;
-      vy_arr[i] = vy;
-
-      vx_arr[1+i] = vx;
-      vy_arr[1+i] = -vy;
-
-      vx_arr[2+i] = -vx;
-      vy_arr[2+i] = vy;
-
-      vx_arr[3+i] = -vx;
-      vy_arr[3+i] = -vy;
-    }
-
-    for (int k = 0; k < NUM_ROCKETS; k++)
-    {
-      sprintf(bodies[k].name, "Body %d", k);
-      bodies[k].mass = 1 * pow(10,3);
-      bodies[k].px = -1 * AU + k;
-      bodies[k].py = k;
-      bodies[k].vx = vx_arr[k];
-      bodies[k].vy = vy_arr[k];
-      printf("Body %d \t%f, \t%f, \t%f, \t%f\n",k, bodies[k].name, bodies[k].px/AU, bodies[k].py/AU, bodies[k].vx, bodies[k].vy);
-    }
-#endif
+    printf("Nbody Cuda call\n");
+    nbody_cuda();
 }

@@ -24,7 +24,7 @@ using namespace std;
 #define AU  (149.6e6 * 1000)     // 149.6 million km, in meters.
 #define SCALE  (250 / AU)
 #define NUM_BODIES 3
-#define NUM_STEPS 18000
+#define NUM_STEPS 5
 #define TIMESTEP 24*3600
 
 typedef struct {
@@ -169,20 +169,9 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
   }
   return 1;
 }
-////////////////////////////////////////////////////////////////////////////////
-// Program main
-////////////////////////////////////////////////////////////////////////////////
-int main(int argc, char **argv)
+void nbody_init_data(Body *bodies)
 {
-    printf("Starting...\n");
-
-    // Declare an object of class geeks
-
     Body earth, sun, venus;
-    Body *bodies;
-    Body *d_bodies;
-
-    bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
 
     sprintf(sun.name, "%s", "sun");
     sun.mass = 1.98892 * pow(10,30);
@@ -209,8 +198,23 @@ int main(int argc, char **argv)
     memcpy(&bodies[0], &sun, sizeof(Body));
     memcpy(&bodies[1], &earth, sizeof(Body));
     memcpy(&bodies[2], &venus, sizeof(Body));
+}
+////////////////////////////////////////////////////////////////////////////////
+// Program main
+////////////////////////////////////////////////////////////////////////////////
+/*int main(int argc, char **argv)*/
+extern "C" void nbody_cuda()
+{
+    printf("Cuda Starting...\n");
 
-    int devID = findCudaDevice(argc, (const char **) argv);
+    // Declare an object of class geeks
+
+    Body *bodies;
+    Body *d_bodies;
+
+    bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
+
+    nbody_init_data(bodies);
 
 		// Allocate input device memory
     checkCudaErrors(cudaMalloc((void **) &d_bodies, NUM_BODIES * sizeof(Body)));
@@ -224,8 +228,8 @@ int main(int argc, char **argv)
     dim3 dimGrid(1, 1, 1);
     for (int step = 1; step < NUM_STEPS; step++)
     {
-      //nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, step);
-      serialNbody(bodies, step);
+      nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, step);
+      /*serialNbody(bodies, step);*/
     }
 
     checkCudaErrors(cudaFree(d_bodies));
