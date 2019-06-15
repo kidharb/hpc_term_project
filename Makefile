@@ -19,5 +19,5 @@ nbody.o: nbody.cu
 nbody_mpi.o: nbody_mpi.c
 	$(MPICC) $(CCFLAGS) nbody_mpi.c -o nbody_mpi.o
 
-clean: nbody.o nbody nbody_mpi.o
+clean:
 	rm nbody nbody_mpi.o nbody.o

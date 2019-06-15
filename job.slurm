@@ -4,7 +4,7 @@
 # specify number of nodes
 #SBATCH -N 8
 # specify number of cores
-#SBATCH -n 8
+#SBATCH -n 1
 # specify memory pool for all cores
 ##SBATCH --mem 1
 # specify the wall clock time limit for the job
@@ -17,7 +17,7 @@
 # specify the filename for stderr
 #SBATCH -e /home-mscluster/kbachan/slurm_%N.err
 # Just one MPI task per node
-#SBATCH --ntasks-per-node=1 ### Number of tasks (MPI processes)
+#SBATCH --ntasks-per-node=8 ### Number of tasks (MPI processes)
 
 
 echo ------------------------------------------------------

@@ -1,27 +1,42 @@
 #include <mpi.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
-#define G 6.67428e-11
+#include "nbody.h"
 
-// Assumed scale: 100 pixels = 1AU.
-#define AU  (149.6e6 * 1000)     // 149.6 million km, in meters.
-#define SCALE  (250 / AU)
-#define NUM_ROCKETS 1200
-#define NUM_TYPES 6
-#define NUM_STEPS 5
+void nbody_cuda(Body *);
 
-//extern "C" nbdoy_cuda();
-void nbody_cuda();
+void nbody_init_data(Body *bodies)
+{
+    Body earth, sun, venus;
 
-typedef struct {
-  char name[20];
-  double mass;
-  double px;
-  double py;
-  double vx;
-  double vy;
-}Body;
+    sprintf(sun.name, "%s", "sun");
+    sun.mass = 1.98892 * pow(10,30);
+    /*sun.mass = 1.98892 * pow(10,24);*/
+    sun.px = 0;
+    sun.py = 0;
+    sun.vx = 0;
+    sun.vy = 0;
+
+    sprintf(earth.name, "%s", "earth");
+    earth.mass = 5.9742 * pow(10,24);
+    earth.px = -1*AU;
+    earth.py = 0;
+    earth.vx = 0;
+    earth.vy = 29.783*1000;            // 29.783 km/sec
+
+    sprintf(venus.name, "%s", "venus");
+    venus.mass = 4.8685 * pow(10,24);
+    venus.px = 0.723 * AU;
+    venus.py = 0;
+    venus.vx = 0;
+    venus.vy = -35.02 * 1000;
+
+    memcpy(&bodies[0], &sun, sizeof(Body));
+    memcpy(&bodies[1], &earth, sizeof(Body));
+    memcpy(&bodies[2], &venus, sizeof(Body));
+}
 
 int main(int argc, char** argv) {
     // Initialize the MPI environment
@@ -34,6 +49,12 @@ int main(int argc, char** argv) {
     int blocklen[NUM_TYPES] = { 20, 1, 1, 1, 1, 1 };
     MPI_Aint array_of_displacements[NUM_TYPES];
     MPI_Aint name_addr, mass_addr, px_addr, py_addr, vx_addr, vy_addr;
+
+    /* setup planets */
+    Body *bodies;
+    /* Allocate memory for the planets */
+    bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
+    nbody_init_data(bodies);
 
     /* Init MPI */
     MPI_Init(NULL, NULL);
@@ -97,10 +118,9 @@ int main(int argc, char** argv) {
         printf("Step #%d received planet vy %e from Process 0\n",step, planets[0].vy);
       }
     }
-    printf("Process %d terminated\n",world_rank);
     // Finalize the MPI environment.
     MPI_Type_free(&planettype);
     MPI_Finalize();
     printf("Nbody Cuda call\n");
-    nbody_cuda();
+    nbody_cuda(bodies);
 }

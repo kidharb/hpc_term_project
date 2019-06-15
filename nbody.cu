@@ -3,43 +3,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include "nbody.h"
 
 // Includes CUDA
 #include <cuda_runtime.h>
-
 // Utilities and timing functions
 #include <helper_functions.h>    // includes cuda.h and cuda_runtime_api.h
-
 // CUDA helper functions
 #include <helper_cuda.h>         // helper functions for CUDA error check
-
-#define MAX_EPSILON_ERROR 5e-3f
-#define TILE_SIZE 64 // 64 * 64 * 4 = 16384 < 49152bytes
-#define MAX_SHARED_MEMORY_BYTES 16384
-
-#define G 6.67428e-11
-
-// Assumed scale: 100 pixels = 1AU.
-#define AU  (149.6e6 * 1000)     // 149.6 million km, in meters.
-#define SCALE  (250 / AU)
-#define NUM_BODIES 3
-#define NUM_STEPS 5
-#define TIMESTEP 24*3600
-
-typedef struct {
-    char name[20];
-    double mass;
-    double px;
-    double py;
-    double vx;
-    double vy;
-}Body;
-
-typedef struct {
-    char name[20];
-    double fx;
-    double fy;
-}Force;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Constants
@@ -170,58 +141,19 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
   }
   return 1;
 }
-void nbody_init_data(Body *bodies)
-{
-    Body earth, sun, venus;
-
-    sprintf(sun.name, "%s", "sun");
-    sun.mass = 1.98892 * pow(10,30);
-    /*sun.mass = 1.98892 * pow(10,24);*/
-    sun.px = 0;
-    sun.py = 0;
-    sun.vx = 0;
-    sun.vy = 0;
-
-    sprintf(earth.name, "%s", "earth");
-    earth.mass = 5.9742 * pow(10,24);
-    earth.px = -1*AU;
-    earth.py = 0;
-    earth.vx = 0;
-    earth.vy = 29.783*1000;            // 29.783 km/sec
-
-    sprintf(venus.name, "%s", "venus");
-    venus.mass = 4.8685 * pow(10,24);
-    venus.px = 0.723 * AU;
-    venus.py = 0;
-    venus.vx = 0;
-    venus.vy = -35.02 * 1000;
-
-    memcpy(&bodies[0], &sun, sizeof(Body));
-    memcpy(&bodies[1], &earth, sizeof(Body));
-    memcpy(&bodies[2], &venus, sizeof(Body));
-}
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
 /*int main(int argc, char **argv)*/
 //extern "C" void nbody_cuda()
-void nbody_cuda()
+void nbody_cuda(Body *bodies)
 {
     printf("Cuda Starting...\n");
-
-    // Declare an object of class geeks
-
-    Body *bodies;
     Body *d_bodies;
 
-    bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
-
-    nbody_init_data(bodies);
-
-		// Allocate input device memory
     checkCudaErrors(cudaMalloc((void **) &d_bodies, NUM_BODIES * sizeof(Body)));
     checkCudaErrors(cudaMemcpy(d_bodies,
-                               &bodies[0],
+                               bodies,
                                NUM_BODIES * sizeof(Body),
                                cudaMemcpyHostToDevice));
 
