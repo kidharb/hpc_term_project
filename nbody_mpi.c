@@ -102,5 +102,5 @@ int main(int argc, char** argv) {
     MPI_Type_free(&planettype);
     MPI_Finalize();
     printf("Nbody Cuda call\n");
-    nbody_cuda();
+    //nbody_cuda();
 }

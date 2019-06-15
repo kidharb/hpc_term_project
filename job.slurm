@@ -10,12 +10,12 @@
 # specify the wall clock time limit for the job
 #SBATCH -t 00:5:00
 # specify the job name
-#SBATCH -J test-job
+#SBATCH -J kids-hpc-job
 # specify the filename to be used for writing output
 # NOTE: You must replace the username `hwang' with your own account name!!
-#SBATCH -o /home-mscluster/hwang/HPC2019/mpi_lab2/slurm.%N.%j.out
+#SBATCH -o /home-mscluster/kbachan/slurm_%N.out
 # specify the filename for stderr
-#SBATCH -e /home-mscluster/hwang/HPC2019/mpi_lab2/slurm.%N.%j.err
+#SBATCH -e /home-mscluster/kbachan/slurm_%N.err
 
 echo ------------------------------------------------------
 echo -n 'Job is running on node ' $SLURM_JOB_NODELIST
@@ -30,6 +30,5 @@ echo ------------------------------------------------------
 cd $SLURM_SUBMIT_DIR
 #make clean
 #make
-mpicc -o mpi_mat_vect_mult mpi_mat_vect_mult.c
-mpiexec -n 8 ./mpi_mat_vect_mult 64 64
-
+#mpicc -o mpi_mat_vect_mult mpi_mat_vect_mult.c
+mpiexec -n 2 ./nbody

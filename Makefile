@@ -4,8 +4,9 @@ OMPFLAG=-fopenmp
 NVCC=nvcc
 MPICC=mpicc
 CCFLAGS=-g -c
-LDFLAGS=-L/usr/local/cuda/lib -lcudart
+LDFLAGS=-L/usr/local/cuda/lib64 -lcudart
 
+#cluster: nbody_mpi.o
 
 all: nbody
 

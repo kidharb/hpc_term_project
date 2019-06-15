@@ -1,2 +1,5 @@
 #!/bin/bash
-./nbody 
+rm *.err
+rm *.out
+sbatch job.slurm
+#./nbody 
