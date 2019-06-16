@@ -49,7 +49,7 @@ __global__ void nBodyAcceleration(Body bodies[],
     }
 
     /* Do not calculate attraction to myself */
-    if (myid == bodyIindex)
+    if ((myid == bodyIindex) && (num_planets == num_rockets))
       continue;
 
     dx = (bodies[bodyIindex].px-rockets[myid].px);
@@ -148,6 +148,7 @@ void nbody_cuda(Body *planets, int num_planets, Body *rockets, int num_rockets, 
 {
     Body *d_planets;
     Body *d_rockets;
+    int max_bodies;
 
     checkCudaErrors(cudaMalloc((void **) &d_planets, num_planets * sizeof(Body)));
     checkCudaErrors(cudaMalloc((void **) &d_rockets, num_rockets * sizeof(Body)));
@@ -160,8 +161,12 @@ void nbody_cuda(Body *planets, int num_planets, Body *rockets, int num_rockets, 
                                num_rockets * sizeof(Body),
                                cudaMemcpyHostToDevice));
 
-    // Allocate output device memory
-    dim3 dimBlock(num_planets, 1, 1);
+    if (num_rockets > num_planets)
+      max_bodies = num_rockets;
+    else
+      max_bodies = num_planets;
+
+    dim3 dimBlock(max_bodies, 1, 1);
     dim3 dimGrid(1, 1, 1);
 
     nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_planets, num_planets, d_rockets, num_rockets, step);

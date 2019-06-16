@@ -130,6 +130,10 @@ int main(int argc, char** argv) {
       planets = (Body *)malloc(NUM_PLANETS * sizeof(Body));
       rockets = (Body *)malloc(NUM_PLANETS * sizeof(Body));
       nbody_init_planets(planets);
+      /* The below line is correct. the reason for this is that we are making two structures
+       * of planets so that we can work out their associated force to one another.
+       * In Threads <> 0 we setup two structures, one for planets and one for rockets
+       */
       nbody_init_planets(rockets);
       while (step++ < NUM_STEPS)
       {
@@ -149,6 +153,7 @@ int main(int argc, char** argv) {
       while (step++ < NUM_STEPS)
       {
         MPI_Bcast(planets, 3, planettype, 0, MPI_COMM_WORLD);
+    	nbody_cuda(planets, NUM_PLANETS, rockets, NUM_ROCKETS, step);
         printf("MPI[%d] %s \t%f, \t%f, \t%f, \t%f\n",world_rank, planets[1].name, planets[1].px/AU, planets[1].py/AU, planets[1].vx, planets[1].vy);
       }
       free(planets);
