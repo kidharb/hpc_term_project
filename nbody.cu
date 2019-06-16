@@ -147,10 +147,10 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
 void nbody_cuda(Body *planets, int num_planets, Body *rockets, int num_rockets, int step)
 
 {
-    Body *d_bodies;
+    Body *d_planets;
 
-    checkCudaErrors(cudaMalloc((void **) &d_bodies, num_planets * sizeof(Body)));
-    checkCudaErrors(cudaMemcpy(d_bodies,
+    checkCudaErrors(cudaMalloc((void **) &d_planets, num_planets * sizeof(Body)));
+    checkCudaErrors(cudaMemcpy(d_planets,
                                planets,
                                num_planets * sizeof(Body),
                                cudaMemcpyHostToDevice));
@@ -159,13 +159,13 @@ void nbody_cuda(Body *planets, int num_planets, Body *rockets, int num_rockets, 
     dim3 dimBlock(num_planets, 1, 1);
     dim3 dimGrid(1, 1, 1);
 
-    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, num_planets, d_bodies, num_rockets, step);
+    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_planets, num_planets, d_planets, num_rockets, step);
     checkCudaErrors(cudaMemcpy(planets,
-                               d_bodies,
+                               d_planets,
                                num_planets * sizeof(Body),
                                cudaMemcpyDeviceToHost));
 
-    checkCudaErrors(cudaFree(d_bodies));
+    checkCudaErrors(cudaFree(d_planets));
     checkCudaErrors(cudaDeviceSynchronize());
     cudaDeviceReset();
 }
