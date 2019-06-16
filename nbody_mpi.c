@@ -5,7 +5,7 @@
 #include <math.h>
 #include "nbody.h"
 
-void nbody_cuda(Body *, int);
+void nbody_cuda(Body *, int, Body *, int, int);
 
 void nbody_init_rockets(Body *bodies)
 {
@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
       while (step++ < NUM_STEPS)
       {
 	/* Update planets positions */
-    	nbody_cuda(bodies, step);
+    	nbody_cuda(bodies, NUM_PLANETS, bodies, NUM_PLANETS, step);
         MPI_Bcast(bodies, 3, planettype, 0, MPI_COMM_WORLD);
         /*message--;*/
       }
