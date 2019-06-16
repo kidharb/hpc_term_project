@@ -145,27 +145,37 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
 void nbody_cuda(Body *planets, int num_planets, Body *rockets, int num_rockets, int step)
-
 {
     Body *d_planets;
+    Body *d_rockets;
 
     checkCudaErrors(cudaMalloc((void **) &d_planets, num_planets * sizeof(Body)));
+    checkCudaErrors(cudaMalloc((void **) &d_rockets, num_rockets * sizeof(Body)));
     checkCudaErrors(cudaMemcpy(d_planets,
                                planets,
                                num_planets * sizeof(Body),
+                               cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(d_rockets,
+                               rockets,
+                               num_rockets * sizeof(Body),
                                cudaMemcpyHostToDevice));
 
     // Allocate output device memory
     dim3 dimBlock(num_planets, 1, 1);
     dim3 dimGrid(1, 1, 1);
 
-    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_planets, num_planets, d_planets, num_rockets, step);
+    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_planets, num_planets, d_rockets, num_rockets, step);
     checkCudaErrors(cudaMemcpy(planets,
                                d_planets,
                                num_planets * sizeof(Body),
                                cudaMemcpyDeviceToHost));
+    checkCudaErrors(cudaMemcpy(rockets,
+                               d_rockets,
+                               num_rockets * sizeof(Body),
+                               cudaMemcpyDeviceToHost));
 
     checkCudaErrors(cudaFree(d_planets));
+    checkCudaErrors(cudaFree(d_rockets));
     checkCudaErrors(cudaDeviceSynchronize());
     cudaDeviceReset();
 }

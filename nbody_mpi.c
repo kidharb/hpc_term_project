@@ -9,7 +9,6 @@ void nbody_cuda(Body *, int, Body *, int, int);
 
 void nbody_init_rockets(Body *bodies)
 {
-    int rockets;
     double vx=0,vr,vy=0;
     double vx_arr[NUM_ROCKETS];
     double vy_arr[NUM_ROCKETS];
@@ -80,8 +79,9 @@ int main(int argc, char** argv) {
     int step = 0;
 
     MPI_Status status;
-    Body *bodies;
-    Body planets;
+    Body *planets;
+    Body *rockets;
+    Body planets_disp;
     MPI_Datatype planettype;
     MPI_Datatype type[NUM_TYPES] = { MPI_CHAR, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE };
     int blocklen[NUM_TYPES] = { 20, 1, 1, 1, 1, 1 };
@@ -93,12 +93,12 @@ int main(int argc, char** argv) {
     MPI_Init(NULL, NULL);
 
     /* Create our user defined data structure for the planets to make communication easier, later */
-    MPI_Get_address(&planets.name, &name_addr);
-    MPI_Get_address(&planets.mass, &mass_addr);
-    MPI_Get_address(&planets.px, &px_addr);
-    MPI_Get_address(&planets.py, &py_addr);
-    MPI_Get_address(&planets.vx, &vx_addr);
-    MPI_Get_address(&planets.vy, &vy_addr);
+    MPI_Get_address(&planets_disp.name, &name_addr);
+    MPI_Get_address(&planets_disp.mass, &mass_addr);
+    MPI_Get_address(&planets_disp.px, &px_addr);
+    MPI_Get_address(&planets_disp.py, &py_addr);
+    MPI_Get_address(&planets_disp.vx, &vx_addr);
+    MPI_Get_address(&planets_disp.vy, &vy_addr);
 
     array_of_displacements[0] = 0;
     array_of_displacements[1] = mass_addr - name_addr;
@@ -127,28 +127,34 @@ int main(int argc, char** argv) {
     {
       /* setup planets */
       /* Allocate memory for the planets */
-      bodies = (Body *)malloc(NUM_PLANETS * sizeof(Body));
-      nbody_init_planets(bodies);
+      planets = (Body *)malloc(NUM_PLANETS * sizeof(Body));
+      rockets = (Body *)malloc(NUM_PLANETS * sizeof(Body));
+      nbody_init_planets(planets);
+      nbody_init_planets(rockets);
       while (step++ < NUM_STEPS)
       {
 	/* Update planets positions */
-    	nbody_cuda(bodies, NUM_PLANETS, bodies, NUM_PLANETS, step);
-        MPI_Bcast(bodies, 3, planettype, 0, MPI_COMM_WORLD);
-        /*message--;*/
+    	nbody_cuda(planets, NUM_PLANETS, rockets, NUM_PLANETS, step);
+        MPI_Bcast(planets, 3, planettype, 0, MPI_COMM_WORLD);
       }
+      free(planets);
+      free(rockets);
     }
     else
     {
-      bodies = (Body *)malloc(NUM_ROCKETS * sizeof(Body));
-      nbody_init_rockets(bodies);
+      planets = (Body *)malloc(NUM_PLANETS * sizeof(Body));
+      rockets = (Body *)malloc(NUM_ROCKETS * sizeof(Body));
+      nbody_init_planets(planets);
+      nbody_init_rockets(rockets);
       while (step++ < NUM_STEPS)
       {
-        MPI_Bcast(bodies, 3, planettype, 0, MPI_COMM_WORLD);
-        printf("MPI[%d] %s \t%f, \t%f, \t%f, \t%f\n",world_rank, bodies[1].name, bodies[1].px/AU, bodies[1].py/AU, bodies[1].vx, bodies[1].vy);
+        MPI_Bcast(planets, 3, planettype, 0, MPI_COMM_WORLD);
+        printf("MPI[%d] %s \t%f, \t%f, \t%f, \t%f\n",world_rank, planets[1].name, planets[1].px/AU, planets[1].py/AU, planets[1].vx, planets[1].vy);
       }
+      free(planets);
+      free(rockets);
     }
     // Finalize the MPI environment.
-    free(bodies);
     MPI_Type_free(&planettype);
     MPI_Finalize();
 }
