@@ -39,13 +39,13 @@ __global__ void nBodyAcceleration(Body n_bodies[],
 
   if (tid == 0)
   {
-    printf("\nStep #%d\n",step);
+    //printf("\nStep #%d\n",step);
   }
-  for (int bodyIindex = 0; bodyIindex < num_n_bodies; bodyIindex++)
+  for (int bodyIindex = 0; bodyIindex < num_m_bodies; bodyIindex++)
   {
     if (tid == 0)
     {
-      printf("Cuda %s \t%f, \t%f, \t%f, \t%f\n",n_bodies[bodyIindex].name, n_bodies[bodyIindex].px/AU, n_bodies[bodyIindex].py/AU, n_bodies[bodyIindex].vx, n_bodies[bodyIindex].vy);
+      //printf("Cuda %s \t%f, \t%f, \t%f, \t%f\n",n_bodies[bodyIindex].name, n_bodies[bodyIindex].px/AU, n_bodies[bodyIindex].py/AU, n_bodies[bodyIindex].vx, n_bodies[bodyIindex].vy);
     }
 
     /* Do not calculate attraction to myself */
@@ -145,7 +145,6 @@ void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodi
 {
     Body *d_n_bodies;
     Body *d_m_bodies;
-    int max_bodies;
 
     checkCudaErrors(cudaMalloc((void **) &d_n_bodies, num_n_bodies * sizeof(Body)));
     checkCudaErrors(cudaMalloc((void **) &d_m_bodies, num_m_bodies * sizeof(Body)));
@@ -158,12 +157,7 @@ void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodi
                                num_m_bodies * sizeof(Body),
                                cudaMemcpyHostToDevice));
 
-    if (num_n_bodies == num_m_bodies)
-      max_bodies = num_n_bodies;
-    else
-      max_bodies = num_m_bodies;
-
-    dim3 dimBlock(max_bodies, 1, 1);
+    dim3 dimBlock(num_n_bodies, 1, 1);
     dim3 dimGrid(1, 1, 1);
 
     nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_n_bodies, num_n_bodies, d_m_bodies, num_m_bodies, step);
@@ -181,4 +175,3 @@ void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodi
     checkCudaErrors(cudaDeviceSynchronize());
     cudaDeviceReset();
 }
-

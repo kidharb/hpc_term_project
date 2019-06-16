@@ -2,9 +2,9 @@
 # specify a partition
 #SBATCH -p ha
 # specify number of nodes
-#SBATCH -N 8
+#SBATCH -N 2
 # specify number of cores
-#SBATCH -n 8
+#SBATCH -n 2
 # specify memory pool for all cores
 ##SBATCH --mem 1
 # specify the wall clock time limit for the job

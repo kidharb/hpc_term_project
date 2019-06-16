@@ -40,7 +40,7 @@ void nbody_init_rockets(Body *bodies)
       bodies[k].py = k;
       bodies[k].vx = vx_arr[k];
       bodies[k].vy = vy_arr[k];
-      printf("Body %d \t%f \t%f \t%f \t%f \t%f\n",k, bodies[k].name, bodies[k].px/AU, bodies[k].py/AU, bodies[k].vx, bodies[k].vy);
+      //printf("Body %d \t%f \t%f \t%f \t%f \t%f\n",k, bodies[k].name, bodies[k].px/AU, bodies[k].py/AU, bodies[k].vx, bodies[k].vy);
     }
 }
 void nbody_init_planets(Body *bodies)
@@ -153,8 +153,12 @@ int main(int argc, char** argv) {
       while (step++ < NUM_STEPS)
       {
         MPI_Bcast(planets, 3, planettype, 0, MPI_COMM_WORLD);
-    	nbody_cuda(planets, NUM_PLANETS, rockets, NUM_ROCKETS, step);
-        printf("MPI[%d] %s \t%f, \t%f, \t%f, \t%f\n",world_rank, rockets[1].name, rockets[1].px/AU, rockets[1].py/AU, rockets[1].vx, rockets[1].vy);
+    	nbody_cuda(rockets, NUM_ROCKETS, planets, NUM_PLANETS, step);
+	printf("Step #%d\n",step);
+#if (1)
+	for (int k = 0; k < NUM_ROCKETS; k++)
+          printf("MPI[%d] %s \t%f, \t%f, \t%f, \t%f\n",world_rank, rockets[k].name, rockets[k].px/AU, rockets[k].py/AU, rockets[k].vx, rockets[k].vy);
+#endif
       }
       free(planets);
       free(rockets);
