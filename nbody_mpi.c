@@ -19,7 +19,7 @@ void nbody_init_rockets(Body *bodies)
     for (int i = 0; i < NUM_ROCKETS; i+=4)
     {
       vx += vr / NUM_ROCKETS * 4;
-      vy = sqrt(pow(vr,2) - pow(vx,2) + 0.000000001);
+      vy = sqrt((pow(vr,2)+0.0001) - pow(vx,2));
       vx_arr[i] = vx;
       vy_arr[i] = vy;
 
