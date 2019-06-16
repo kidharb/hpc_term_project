@@ -25,6 +25,9 @@ bool testResult = true;
 /*__device__ float totalFy;*/
 
 __global__ void nBodyAcceleration(Body bodies[], 
+				  int num_planets,
+				  Body rockets[],
+				  int num_rockets,
                                   int step)
 {
   Force myForce;
@@ -144,8 +147,6 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
-/*int main(int argc, char **argv)*/
-//extern "C" void nbody_cuda()
 void nbody_cuda(Body *planets, int step)
 {
     Body *d_bodies;
@@ -159,11 +160,9 @@ void nbody_cuda(Body *planets, int step)
     // Allocate output device memory
     dim3 dimBlock(NUM_BODIES, 1, 1);
     dim3 dimGrid(1, 1, 1);
-    //for (int step = 1; step < NUM_STEPS; step++)
-    {
-      nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, step);
+
+    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, NUM_BODIES, d_bodies, NUM_ROCKETS, step);
       /*serialNbody(bodies, step);*/
-    }
     checkCudaErrors(cudaMemcpy(planets,
                                d_bodies,
                                NUM_BODIES * sizeof(Body),
