@@ -148,21 +148,21 @@ void nbody_cuda(Body *planets, int step)
 {
     Body *d_bodies;
 
-    checkCudaErrors(cudaMalloc((void **) &d_bodies, NUM_BODIES * sizeof(Body)));
+    checkCudaErrors(cudaMalloc((void **) &d_bodies, NUM_PLANETS * sizeof(Body)));
     checkCudaErrors(cudaMemcpy(d_bodies,
                                planets,
-                               NUM_BODIES * sizeof(Body),
+                               NUM_PLANETS * sizeof(Body),
                                cudaMemcpyHostToDevice));
 
     // Allocate output device memory
-    dim3 dimBlock(NUM_BODIES, 1, 1);
+    dim3 dimBlock(NUM_PLANETS, 1, 1);
     dim3 dimGrid(1, 1, 1);
 
-    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, NUM_BODIES, d_bodies, NUM_ROCKETS, step);
+    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_bodies, NUM_PLANETS, d_bodies, NUM_ROCKETS, step);
       /*serialNbody(bodies, step);*/
     checkCudaErrors(cudaMemcpy(planets,
                                d_bodies,
-                               NUM_BODIES * sizeof(Body),
+                               NUM_PLANETS * sizeof(Body),
                                cudaMemcpyDeviceToHost));
 
     checkCudaErrors(cudaFree(d_bodies));

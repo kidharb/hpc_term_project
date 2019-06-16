@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
     {
       /* setup planets */
       /* Allocate memory for the planets */
-      bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
+      bodies = (Body *)malloc(NUM_PLANETS * sizeof(Body));
       nbody_init_planets(bodies);
       while (step++ < NUM_STEPS)
       {
@@ -139,7 +139,7 @@ int main(int argc, char** argv) {
     }
     else
     {
-      bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
+      bodies = (Body *)malloc(NUM_ROCKETS * sizeof(Body));
       nbody_init_rockets(bodies);
       while (step++ < NUM_STEPS)
       {
