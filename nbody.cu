@@ -21,9 +21,6 @@ bool testResult = true;
 ////////////////////////////////////////////////////////////////////////////////
 //! Parallel convolution on GPU using shared memory
 ////////////////////////////////////////////////////////////////////////////////
-/*__device__ float totalFx;*/
-/*__device__ float totalFy;*/
-
 __global__ void nBodyAcceleration(Body bodies[], 
 				  int num_planets,
 				  Body rockets[],
@@ -44,7 +41,7 @@ __global__ void nBodyAcceleration(Body bodies[],
   {
     printf("\nStep #%d\n",step);
   }
-  for (int bodyIindex = 0; bodyIindex < NUM_BODIES; bodyIindex++)
+  for (int bodyIindex = 0; bodyIindex < num_planets; bodyIindex++)
   {
     if (tid == 0)
     {
@@ -55,10 +52,10 @@ __global__ void nBodyAcceleration(Body bodies[],
     if (myid == bodyIindex)
       continue;
 
-    dx = (bodies[bodyIindex].px-bodies[myid].px);
-    dy = (bodies[bodyIindex].py-bodies[myid].py);
+    dx = (bodies[bodyIindex].px-rockets[myid].px);
+    dy = (bodies[bodyIindex].py-rockets[myid].py);
     d = sqrt(dx*dx + dy*dy);
-    f = G * bodies[bodyIindex].mass * bodies[myid].mass / (d*d);
+    f = G * bodies[bodyIindex].mass * rockets[myid].mass / (d*d);
   
     theta = atan2(dy, dx);
     myForce.fx = cos(theta) * f;
