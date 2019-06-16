@@ -5,7 +5,7 @@
 #include <math.h>
 #include "nbody.h"
 
-void nbody_cuda(Body *, int);
+void nbody_cuda(Body *, int, Body *, int, int);
 
 void nbody_init_rockets(Body *bodies)
 {
@@ -81,6 +81,7 @@ int main(int argc, char** argv) {
 
     MPI_Status status;
     Body *bodies;
+    Body *rockets;
     Body planets;
     MPI_Datatype planettype;
     MPI_Datatype type[NUM_TYPES] = { MPI_CHAR, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE };
@@ -127,25 +128,26 @@ int main(int argc, char** argv) {
     {
       /* setup planets */
       /* Allocate memory for the planets */
-      bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
+      bodies = (Body *)malloc(NUM_PLANETS * sizeof(Body));
       nbody_init_planets(bodies);
       while (step++ < NUM_STEPS)
       {
 	/* Update planets positions */
-    	nbody_cuda(bodies, step);
+    	nbody_cuda(bodies, NUM_PLANETS, bodies, NUM_PLANETS, step);
         MPI_Bcast(bodies, 3, planettype, 0, MPI_COMM_WORLD);
         /*message--;*/
       }
     }
     else
     {
-      bodies = (Body *)malloc(NUM_BODIES * sizeof(Body));
-      nbody_init_rockets(bodies);
+      rockets = (Body *)malloc(NUM_ROCKETS * sizeof(Body));
+      nbody_init_rockets(rockets);
       while (step++ < NUM_STEPS)
       {
         MPI_Bcast(bodies, 3, planettype, 0, MPI_COMM_WORLD);
         printf("MPI[%d] %s \t%f, \t%f, \t%f, \t%f\n",world_rank, bodies[1].name, bodies[1].px/AU, bodies[1].py/AU, bodies[1].vx, bodies[1].vy);
       }
+      free(rockets);
     }
     // Finalize the MPI environment.
     free(bodies);
