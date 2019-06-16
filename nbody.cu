@@ -21,10 +21,10 @@ bool testResult = true;
 ////////////////////////////////////////////////////////////////////////////////
 //! Parallel convolution on GPU using shared memory
 ////////////////////////////////////////////////////////////////////////////////
-__global__ void nBodyAcceleration(Body bodies[], 
-				  int num_planets,
-				  Body rockets[],
-				  int num_rockets,
+__global__ void nBodyAcceleration(Body n_bodies[], 
+				  int num_n_bodies,
+				  Body m_bodies[],
+				  int num_m_bodies,
                                   int step)
 {
   Force myForce;
@@ -41,40 +41,37 @@ __global__ void nBodyAcceleration(Body bodies[],
   {
     printf("\nStep #%d\n",step);
   }
-  for (int bodyIindex = 0; bodyIindex < num_planets; bodyIindex++)
+  for (int bodyIindex = 0; bodyIindex < num_n_bodies; bodyIindex++)
   {
     if (tid == 0)
     {
-      printf("Cuda %s \t%f, \t%f, \t%f, \t%f\n",bodies[bodyIindex].name, bodies[bodyIindex].px/AU, bodies[bodyIindex].py/AU, bodies[bodyIindex].vx, bodies[bodyIindex].vy);
+      printf("Cuda %s \t%f, \t%f, \t%f, \t%f\n",n_bodies[bodyIindex].name, n_bodies[bodyIindex].px/AU, n_bodies[bodyIindex].py/AU, n_bodies[bodyIindex].vx, n_bodies[bodyIindex].vy);
     }
 
     /* Do not calculate attraction to myself */
-    if ((myid == bodyIindex) && (num_planets == num_rockets))
+    if ((myid == bodyIindex) && (num_n_bodies == num_m_bodies))
       continue;
 
-    dx = (bodies[bodyIindex].px-rockets[myid].px);
-    dy = (bodies[bodyIindex].py-rockets[myid].py);
+    dx = (n_bodies[bodyIindex].px-m_bodies[myid].px);
+    dy = (n_bodies[bodyIindex].py-m_bodies[myid].py);
     d = sqrt(dx*dx + dy*dy);
-    f = G * bodies[bodyIindex].mass * rockets[myid].mass / (d*d);
+    f = G * n_bodies[bodyIindex].mass * m_bodies[myid].mass / (d*d);
   
     theta = atan2(dy, dx);
     myForce.fx = cos(theta) * f;
     myForce.fy = sin(theta) * f;
     /*printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);*/
   
-    /*atomicAdd(&totalFx, myForce.fx);*/
-    /*atomicAdd(&totalFy, myForce.fy);*/
     totalFx += myForce.fx;
     totalFy += myForce.fy;
     /*printf("[%s %s] Total fx, Total fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, totalFx, totalFy);*/
   }
-  /*__syncthreads();*/
   
   /* Use one thread to do the updates */
-  bodies[tid].vx += totalFx / bodies[tid].mass * TIMESTEP;
-  bodies[tid].vy += totalFy / bodies[tid].mass * TIMESTEP;
-  bodies[tid].px += bodies[tid].vx * TIMESTEP;
-  bodies[tid].py += bodies[tid].vy * TIMESTEP;
+  n_bodies[tid].vx += totalFx / n_bodies[tid].mass * TIMESTEP;
+  n_bodies[tid].vy += totalFy / n_bodies[tid].mass * TIMESTEP;
+  n_bodies[tid].px += n_bodies[tid].vx * TIMESTEP;
+  n_bodies[tid].py += n_bodies[tid].vy * TIMESTEP;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -144,39 +141,39 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
-void nbody_cuda(Body *planets, int num_planets, Body *rockets, int num_rockets, int step)
+void nbody_cuda(Body *planets, int num_n_bodies, Body *rockets, int num_m_bodies, int step)
 {
     Body *d_planets;
     Body *d_rockets;
     int max_bodies;
 
-    checkCudaErrors(cudaMalloc((void **) &d_planets, num_planets * sizeof(Body)));
-    checkCudaErrors(cudaMalloc((void **) &d_rockets, num_rockets * sizeof(Body)));
+    checkCudaErrors(cudaMalloc((void **) &d_planets, num_n_bodies * sizeof(Body)));
+    checkCudaErrors(cudaMalloc((void **) &d_rockets, num_m_bodies * sizeof(Body)));
     checkCudaErrors(cudaMemcpy(d_planets,
                                planets,
-                               num_planets * sizeof(Body),
+                               num_n_bodies * sizeof(Body),
                                cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(d_rockets,
                                rockets,
-                               num_rockets * sizeof(Body),
+                               num_m_bodies * sizeof(Body),
                                cudaMemcpyHostToDevice));
 
-    if (num_rockets > num_planets)
-      max_bodies = num_rockets;
+    if (num_n_bodies == num_m_bodies)
+      max_bodies = num_n_bodies;
     else
-      max_bodies = num_planets;
+      max_bodies = num_m_bodies;
 
     dim3 dimBlock(max_bodies, 1, 1);
     dim3 dimGrid(1, 1, 1);
 
-    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_planets, num_planets, d_rockets, num_rockets, step);
+    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_planets, num_n_bodies, d_rockets, num_m_bodies, step);
     checkCudaErrors(cudaMemcpy(planets,
                                d_planets,
-                               num_planets * sizeof(Body),
+                               num_n_bodies * sizeof(Body),
                                cudaMemcpyDeviceToHost));
     checkCudaErrors(cudaMemcpy(rockets,
                                d_rockets,
-                               num_rockets * sizeof(Body),
+                               num_m_bodies * sizeof(Body),
                                cudaMemcpyDeviceToHost));
 
     checkCudaErrors(cudaFree(d_planets));

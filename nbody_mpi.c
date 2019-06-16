@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
       {
         MPI_Bcast(planets, 3, planettype, 0, MPI_COMM_WORLD);
     	nbody_cuda(planets, NUM_PLANETS, rockets, NUM_ROCKETS, step);
-        printf("MPI[%d] %s \t%f, \t%f, \t%f, \t%f\n",world_rank, planets[1].name, planets[1].px/AU, planets[1].py/AU, planets[1].vx, planets[1].vy);
+        printf("MPI[%d] %s \t%f, \t%f, \t%f, \t%f\n",world_rank, rockets[1].name, rockets[1].px/AU, rockets[1].py/AU, rockets[1].vx, rockets[1].vy);
       }
       free(planets);
       free(rockets);
