@@ -77,47 +77,50 @@ __global__ void nBodyAcceleration(Body n_bodies[],
 ////////////////////////////////////////////////////////////////////////////////
 //! Serial nBody  on CPU
 ////////////////////////////////////////////////////////////////////////////////
-#ifdef MAC
-void serialNbody(Body bodies[],
+#if (1)//def MAC
+void serialNbody(Body n_bodies[],
+	         int num_n_bodies,
+		 Body m_bodies[],
+		 int num_m_bodies,
                  int step)
 {
   Force myForce;
-  double Fx[NUM_BODIES], Fy[NUM_BODIES], dx, dy, d, f, theta;
+  double Fx[NUM_ROCKETS], Fy[NUM_ROCKETS], dx, dy, d, f, theta;
 
   printf("Step #%d\n",step);
-  for (int bodyIindex = 0; bodyIindex < NUM_BODIES; bodyIindex++)
+  for (int bodyIindex = 0; bodyIindex < num_n_bodies; bodyIindex++)
   {
-    printf("Serial %s \t%f, \t%f, \t%f, \t%f\n",bodies[bodyIindex].name, bodies[bodyIindex].px/AU, bodies[bodyIindex].py/AU, bodies[bodyIindex].vx, bodies[bodyIindex].vy);
+    printf("Serial %s \t%f, \t%f, \t%f, \t%f\n",n_bodies[bodyIindex].name, n_bodies[bodyIindex].px/AU, n_bodies[bodyIindex].py/AU, n_bodies[bodyIindex].vx, n_bodies[bodyIindex].vy);
     Fx[bodyIindex] = 0;
     Fy[bodyIindex] = 0;
-    for (int myid = 0; myid < NUM_BODIES; myid++)
+    for (int myid = 0; myid < num_m_bodies; myid++)
     {
       /* Do not calculate attraction to myself */
-      if (myid == bodyIindex)
+      if ((myid == bodyIindex) && (num_n_bodies == num_m_bodies))
         continue;
 
-      dx = (bodies[myid].px-bodies[bodyIindex].px);
-      dy = (bodies[myid].py-bodies[bodyIindex].py);
+      dx = (n_bodies[myid].px-m_bodies[bodyIindex].px);
+      dy = (n_bodies[myid].py-m_bodies[bodyIindex].py);
       d = sqrt(dx*dx + dy*dy);
-      f = G * bodies[bodyIindex].mass * bodies[myid].mass / (d*d);
+      f = G * n_bodies[bodyIindex].mass * m_bodies[myid].mass / (d*d);
       
       theta = atan2(dy, dx);
       myForce.fx = cos(theta) * f;
       myForce.fy = sin(theta) * f;
       Fx[bodyIindex] += myForce.fx;
       Fy[bodyIindex] += myForce.fy;
-      /*printf("[%s %s] partial fx, partial fy = [%e, %e]\n",bodies[myid].name, bodies[bodyIindex].name, Fx[bodyIindex], Fy[bodyIindex]);*/
+      //printf("[%s %s] partial fx, partial fy = [%e, %e]\n",n_bodies[myid].name, n_bodies[bodyIindex].name, Fx[bodyIindex], Fy[bodyIindex]);
     }
   }
-  for (int bodyIindex = 0; bodyIindex < NUM_BODIES; bodyIindex++)
+  for (int bodyIindex = 0; bodyIindex < num_n_bodies; bodyIindex++)
   {
     /*printf("[%s] Total fx, Total fy = [%e, %e]\n",bodies[bodyIindex].name, Fx[bodyIindex], Fy[bodyIindex]);*/
-    bodies[bodyIindex].vx += Fx[bodyIindex] / bodies[bodyIindex].mass * TIMESTEP;
-    bodies[bodyIindex].vy += Fy[bodyIindex] / bodies[bodyIindex].mass * TIMESTEP;
-    bodies[bodyIindex].px += bodies[bodyIindex].vx * TIMESTEP;
-    bodies[bodyIindex].py += bodies[bodyIindex].vy * TIMESTEP;
+    n_bodies[bodyIindex].vx += Fx[bodyIindex] / n_bodies[bodyIindex].mass * TIMESTEP;
+    n_bodies[bodyIindex].vy += Fy[bodyIindex] / n_bodies[bodyIindex].mass * TIMESTEP;
+    n_bodies[bodyIindex].px += n_bodies[bodyIindex].vx * TIMESTEP;
+    n_bodies[bodyIindex].py += n_bodies[bodyIindex].vy * TIMESTEP;
     /*printf("Serial [%s] Total Fx, Total Fy = [%e, %e]\n",bodies[bodyIindex].name, Fx, Fy);*/
-    /*printf("Serial [%s] Updated vx, Updated vy = [%e, %e]\n",bodies[bodyIindex].name, bodies[bodyIindex].vx, bodies[bodyIindex].vy);*/
+    //printf("Serial [%s] Updated vx, Updated vy = [%e, %e]\n",bodies[bodyIindex].name, bodies[bodyIindex].vx, bodies[bodyIindex].vy);
   }
   printf("\n");
 }
@@ -143,6 +146,10 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
 ////////////////////////////////////////////////////////////////////////////////
 void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodies, int step)
 {
+
+#if (1)//def SERIAL
+    serialNbody(n_bodies, num_n_bodies, m_bodies, num_m_bodies, step);
+#else
     Body *d_n_bodies;
     Body *d_m_bodies;
 
@@ -174,4 +181,5 @@ void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodi
     checkCudaErrors(cudaFree(d_m_bodies));
     checkCudaErrors(cudaDeviceSynchronize());
     cudaDeviceReset();
+#endif
 }
