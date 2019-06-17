@@ -1,3 +1,6 @@
 
 assignment2
 ./data/
+.vscode/
+rayon/target
+rayon/omp/app
