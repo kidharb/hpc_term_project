@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
 #include "nbody.h"
 
 void nbody_cuda(Body *, int, Body *, int, int);
@@ -135,12 +136,16 @@ int main(int argc, char** argv) {
        * In Threads <> 0 we setup two structures, one for planets and one for rockets
        */
       nbody_init_planets(rockets);
+      clock_t start1 = clock() ;
       while (step++ < NUM_STEPS)
       {
 	/* Update planets positions */
     	nbody_cuda(planets, NUM_PLANETS, rockets, NUM_PLANETS, step);
-        MPI_Bcast(planets, 3, planettype, 0, MPI_COMM_WORLD);
+        MPI_Bcast(planets, NUM_PLANETS, planettype, 0, MPI_COMM_WORLD);
       }
+      clock_t end1 = clock() ;
+      double elapsed_time = (end1-start1)/(double)CLOCKS_PER_SEC ;
+      printf("(Planets) time for %d steps = %f\n", NUM_STEPS, elapsed_time);
       free(planets);
       free(rockets);
     }
@@ -150,16 +155,20 @@ int main(int argc, char** argv) {
       rockets = (Body *)malloc(NUM_ROCKETS * sizeof(Body));
       nbody_init_planets(planets);
       nbody_init_rockets(rockets);
+      clock_t start2 = clock() ;
       while (step++ < NUM_STEPS)
       {
-        MPI_Bcast(planets, 3, planettype, 0, MPI_COMM_WORLD);
+        MPI_Bcast(planets, NUM_PLANETS, planettype, 0, MPI_COMM_WORLD);
     	nbody_cuda(rockets, NUM_ROCKETS, planets, NUM_PLANETS, step);
+#if (0)
 	printf("Step #%d\n",step);
-#if (1)
 	for (int k = 0; k < NUM_ROCKETS; k++)
           printf("MPI[%d] %s \t%f, \t%f, \t%f, \t%f\n",world_rank, rockets[k].name, rockets[k].px/AU, rockets[k].py/AU, rockets[k].vx, rockets[k].vy);
 #endif
       }
+      clock_t end2 = clock() ;
+      double elapsed_time = (end2-start2)/(double)CLOCKS_PER_SEC ;
+      printf("(%d Bodies) time for %d steps = %f\n", NUM_ROCKETS, NUM_STEPS, elapsed_time);
       free(planets);
       free(rockets);
     }
