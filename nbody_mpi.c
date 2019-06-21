@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
-#include <time.h>
 #include "nbody.h"
 
 void nbody_cuda(Body *, int, Body *, int, int);
@@ -128,13 +127,9 @@ int main(int argc, char** argv) {
     rockets = (Body *)malloc(NUM_ROCKETS * sizeof(Body));
     nbody_init_planets(planets);
     nbody_init_rockets(rockets);
-    clock_t start2 = clock() ;
 
     nbody_cuda(rockets, NUM_ROCKETS, planets, NUM_PLANETS, world_rank);
 
-    clock_t end2 = clock() ;
-    double elapsed_time = (end2-start2)/(double)CLOCKS_PER_SEC ;
-    printf("(%d Bodies) time for %d steps = %f\n", NUM_ROCKETS, NUM_STEPS, elapsed_time);
     free(planets);
     free(rockets);
     }

@@ -6,7 +6,7 @@
 # specify number of cores
 #SBATCH --ntasks=8
 # specify memory pool for all cores
-##SBATCH --mem 100
+##SBATCH --mem 1000
 # specify the wall clock time limit for the job
 #SBATCH -t 00:5:00
 # specify the job name
