@@ -25,7 +25,9 @@ __global__ void nBodyAcceleration(Body n_bodies[],
 				  int num_n_bodies,
 				  Body m_bodies[],
 				  int num_m_bodies,
-                                  int step)
+                                  int mpi_threadId,
+                                  long start_step,
+                              	  long stop_step)
 {
   Force myForce;
   double dx, dy, d, f, theta;
@@ -37,41 +39,36 @@ __global__ void nBodyAcceleration(Body n_bodies[],
   double totalFx = 0;
   double totalFy = 0;
 
-  if (tid == 0)
+  
+  for (long i = start_step; i < stop_step; i++)
   {
-    //printf("\nStep #%d\n",step);
-  }
-  for (int bodyIindex = 0; bodyIindex < num_m_bodies; bodyIindex++)
-  {
-    if (tid == 0)
+    for (int bodyIindex = 0; bodyIindex < num_m_bodies; bodyIindex++)
     {
-      //printf("Cuda %s \t%f, \t%f, \t%f, \t%f\n",n_bodies[bodyIindex].name, n_bodies[bodyIindex].px/AU, n_bodies[bodyIindex].py/AU, n_bodies[bodyIindex].vx, n_bodies[bodyIindex].vy);
+      /* Do not calculate attraction to myself */
+      if ((myid == bodyIindex) && (num_n_bodies == num_m_bodies))
+        continue;
+  
+      dx = (n_bodies[bodyIindex].px-m_bodies[myid].px);
+      dy = (n_bodies[bodyIindex].py-m_bodies[myid].py);
+      d = sqrt(dx*dx + dy*dy);
+      f = G * n_bodies[bodyIindex].mass * m_bodies[myid].mass / (d*d);
+    
+      theta = atan2(dy, dx);
+      myForce.fx = cos(theta) * f;
+      myForce.fy = sin(theta) * f;
+      /*printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);*/
+    
+      totalFx += myForce.fx;
+      totalFy += myForce.fy;
+      /*printf("[%s %s] Total fx, Total fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, totalFx, totalFy);*/
     }
-
-    /* Do not calculate attraction to myself */
-    if ((myid == bodyIindex) && (num_n_bodies == num_m_bodies))
-      continue;
-
-    dx = (n_bodies[bodyIindex].px-m_bodies[myid].px);
-    dy = (n_bodies[bodyIindex].py-m_bodies[myid].py);
-    d = sqrt(dx*dx + dy*dy);
-    f = G * n_bodies[bodyIindex].mass * m_bodies[myid].mass / (d*d);
-  
-    theta = atan2(dy, dx);
-    myForce.fx = cos(theta) * f;
-    myForce.fy = sin(theta) * f;
-    /*printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);*/
-  
-    totalFx += myForce.fx;
-    totalFy += myForce.fy;
-    /*printf("[%s %s] Total fx, Total fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, totalFx, totalFy);*/
+    
+    /* Use one thread to do the updates */
+    n_bodies[tid].vx += totalFx / n_bodies[tid].mass * TIMESTEP;
+    n_bodies[tid].vy += totalFy / n_bodies[tid].mass * TIMESTEP;
+    n_bodies[tid].px += n_bodies[tid].vx * TIMESTEP;
+    n_bodies[tid].py += n_bodies[tid].vy * TIMESTEP;
   }
-  
-  /* Use one thread to do the updates */
-  n_bodies[tid].vx += totalFx / n_bodies[tid].mass * TIMESTEP;
-  n_bodies[tid].vy += totalFy / n_bodies[tid].mass * TIMESTEP;
-  n_bodies[tid].px += n_bodies[tid].vx * TIMESTEP;
-  n_bodies[tid].py += n_bodies[tid].vy * TIMESTEP;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -144,11 +141,11 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
-void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodies, int step)
+void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodies, int threadId)
 {
 
-#if (1)//def SERIAL
-    serialNbody(n_bodies, num_n_bodies, m_bodies, num_m_bodies, step);
+#if (0)//def SERIAL
+    serialNbody(n_bodies, num_n_bodies, m_bodies, num_m_bodies, threadId);
 #else
     Body *d_n_bodies;
     Body *d_m_bodies;
@@ -164,10 +161,12 @@ void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodi
                                num_m_bodies * sizeof(Body),
                                cudaMemcpyHostToDevice));
 
-    dim3 dimBlock(num_n_bodies, 1, 1);
-    dim3 dimGrid(1, 1, 1);
+    int nBlocks = (num_n_bodies + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    nBodyAcceleration<<<dimGrid, dimBlock, 0>>>(d_n_bodies, num_n_bodies, d_m_bodies, num_m_bodies, step);
+    long start_step = threadId * STEPS_PER_THREAD;
+    long stop_step  = start_step + STEPS_PER_THREAD;
+    printf("Workload for thread %d, step %ld till %ld\n",threadId, start_step, stop_step);
+    nBodyAcceleration<<<nBlocks, BLOCK_SIZE>>>(d_n_bodies, num_n_bodies, d_m_bodies, num_m_bodies, threadId, start_step, stop_step);
     checkCudaErrors(cudaMemcpy(n_bodies,
                                d_n_bodies,
                                num_n_bodies * sizeof(Body),

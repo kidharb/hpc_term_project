@@ -115,7 +115,6 @@ int main(int argc, char** argv) {
     int world_size;
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-    // Get the rank of the process
     int world_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
@@ -123,54 +122,21 @@ int main(int argc, char** argv) {
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     int name_len;
     MPI_Get_processor_name(processor_name, &name_len);
-    printf("Thread %d reporting\n",world_rank);
-    if (world_rank == 0)
+    printf("Thread %d reporting out of %d\n", world_rank, world_size);
     {
-      /* setup planets */
-      /* Allocate memory for the planets */
-      planets = (Body *)malloc(NUM_PLANETS * sizeof(Body));
-      rockets = (Body *)malloc(NUM_PLANETS * sizeof(Body));
-      nbody_init_planets(planets);
-      /* The below line is correct. the reason for this is that we are making two structures
-       * of planets so that we can work out their associated force to one another.
-       * In Threads <> 0 we setup two structures, one for planets and one for rockets
-       */
-      nbody_init_planets(rockets);
-      clock_t start1 = clock() ;
-      while (step++ < NUM_STEPS)
-      {
-	/* Update planets positions */
-    	nbody_cuda(planets, NUM_PLANETS, rockets, NUM_PLANETS, step);
-        MPI_Bcast(planets, NUM_PLANETS, planettype, 0, MPI_COMM_WORLD);
-      }
-      clock_t end1 = clock() ;
-      double elapsed_time = (end1-start1)/(double)CLOCKS_PER_SEC ;
-      printf("(Planets) time for %d steps = %f\n", NUM_STEPS, elapsed_time);
-      free(planets);
-      free(rockets);
-    }
-    else
-    {
-      planets = (Body *)malloc(NUM_PLANETS * sizeof(Body));
-      rockets = (Body *)malloc(NUM_ROCKETS * sizeof(Body));
-      nbody_init_planets(planets);
-      nbody_init_rockets(rockets);
-      clock_t start2 = clock() ;
-      while (step++ < NUM_STEPS)
-      {
-        MPI_Bcast(planets, NUM_PLANETS, planettype, 0, MPI_COMM_WORLD);
-    	nbody_cuda(rockets, NUM_ROCKETS, planets, NUM_PLANETS, step);
-#if (0)
-	printf("Step #%d\n",step);
-	for (int k = 0; k < NUM_ROCKETS; k++)
-          printf("MPI[%d] %s \t%f, \t%f, \t%f, \t%f\n",world_rank, rockets[k].name, rockets[k].px/AU, rockets[k].py/AU, rockets[k].vx, rockets[k].vy);
-#endif
-      }
-      clock_t end2 = clock() ;
-      double elapsed_time = (end2-start2)/(double)CLOCKS_PER_SEC ;
-      printf("(%d Bodies) time for %d steps = %f\n", NUM_ROCKETS, NUM_STEPS, elapsed_time);
-      free(planets);
-      free(rockets);
+    planets = (Body *)malloc(NUM_PLANETS * sizeof(Body));
+    rockets = (Body *)malloc(NUM_ROCKETS * sizeof(Body));
+    nbody_init_planets(planets);
+    nbody_init_rockets(rockets);
+    clock_t start2 = clock() ;
+
+    nbody_cuda(rockets, NUM_ROCKETS, planets, NUM_PLANETS, world_rank);
+
+    clock_t end2 = clock() ;
+    double elapsed_time = (end2-start2)/(double)CLOCKS_PER_SEC ;
+    printf("(%d Bodies) time for %d steps = %f\n", NUM_ROCKETS, NUM_STEPS, elapsed_time);
+    free(planets);
+    free(rockets);
     }
     // Finalize the MPI environment.
     MPI_Type_free(&planettype);

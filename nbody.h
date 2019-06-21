@@ -8,10 +8,11 @@
 #define AU  (149.6e6 * 1000)     // 149.6 million km, in meters.
 #define SCALE  (250 / AU)
 #define NUM_PLANETS 3
-#define NUM_ROCKETS 12
+#define NUM_ROCKETS 10000
 #define TIMESTEP 24*3600
 #define NUM_TYPES 6
-#define NUM_STEPS 50
+#define STEPS_PER_THREAD 1000
+#define BLOCK_SIZE 256
 
 typedef struct {
     char name[20];
