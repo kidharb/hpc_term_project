@@ -89,7 +89,7 @@ void serialNbody(Body n_bodies[],
   {
     for (int bodyIindex = 0; bodyIindex < num_n_bodies; bodyIindex++)
     {
-      printf("Serial %s \t%f, \t%f, \t%f, \t%f\n",n_bodies[bodyIindex].name, n_bodies[bodyIindex].px/AU, n_bodies[bodyIindex].py/AU, n_bodies[bodyIindex].vx, n_bodies[bodyIindex].vy);
+      //printf("Serial %s \t%f, \t%f, \t%f, \t%f\n",n_bodies[bodyIindex].name, n_bodies[bodyIindex].px/AU, n_bodies[bodyIindex].py/AU, n_bodies[bodyIindex].vx, n_bodies[bodyIindex].vy);
       Fx[bodyIindex] = 0;
       Fy[bodyIindex] = 0;
       for (int myid = 0; myid < num_m_bodies; myid++)
@@ -98,8 +98,8 @@ void serialNbody(Body n_bodies[],
         if ((myid == bodyIindex) && (num_n_bodies == num_m_bodies))
           continue;
 
-        dx = (n_bodies[myid].px-m_bodies[bodyIindex].px);
-        dy = (n_bodies[myid].py-m_bodies[bodyIindex].py);
+        dx = (n_bodies[bodyIindex].px-m_bodies[myid].px);
+        dy = (n_bodies[bodyIindex].py-m_bodies[myid].py);
         d = sqrt(dx*dx + dy*dy);
         f = G * n_bodies[bodyIindex].mass * m_bodies[myid].mass / (d*d);
         
@@ -145,8 +145,14 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
 void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodies, int threadId)
 {
 
-#if (0)//def SERIAL
-    serialNbody(n_bodies, num_n_bodies, m_bodies, num_m_bodies, threadId);
+#if (1)//def SERIAL
+    long start_step = 0;
+    long stop_step  = 8 * STEPS_PER_THREAD;
+    clock_t start2 = clock();
+    serialNbody(n_bodies, num_n_bodies, m_bodies, num_m_bodies, start_step, stop_step);
+    clock_t end2 = clock() ;
+    double elapsed_time = (end2-start2)/(double)CLOCKS_PER_SEC ;
+    printf("Serial (%d Bodies) time = %f\n", NUM_ROCKETS, elapsed_time);
 #else
     Body *d_n_bodies;
     Body *d_m_bodies;
@@ -173,11 +179,6 @@ void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodi
     double elapsed_time = (end2-start2)/(double)CLOCKS_PER_SEC ;
     printf("Cuda + MPI (%d Bodies) Thread %d time = %f\n", NUM_ROCKETS, threadId, elapsed_time);
 
-    start2 = clock();
-//    serialNbody(d_n_bodies, num_n_bodies, d_m_bodies, num_m_bodies, start_step, stop_step);
-    end2 = clock() ;
-    elapsed_time = (end2-start2)/(double)CLOCKS_PER_SEC ;
-    printf("Serial (%d Bodies) time = %f\n", NUM_ROCKETS,elapsed_time);
 /*    checkCudaErrors(cudaMemcpy(n_bodies,
                                d_n_bodies,
                                num_n_bodies * sizeof(Body),
