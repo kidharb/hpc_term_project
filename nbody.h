@@ -11,7 +11,7 @@
 #define NUM_ROCKETS 30000
 #define TIMESTEP 24*3600
 #define NUM_TYPES 6
-#define NUM_STEPS 10
+#define NUM_STEPS 100000
 #define BLOCK_SIZE 256
 
 typedef struct {

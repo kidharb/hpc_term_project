@@ -221,13 +221,14 @@ void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodi
     serialNbody(n_bodies, num_n_bodies, m_bodies, num_m_bodies);
     clock_t end2 = clock() ;
     double elapsed_time = (end2-start2)/(double)CLOCKS_PER_SEC ;
-    printf("Serial (%d Bodies) time = %f\n", NUM_ROCKETS, elapsed_time);
+    printf("Serial Steps %d for %d Bodies time = %f\n", NUM_STEPS, NUM_ROCKETS, elapsed_time);
   }
   else
   {
     Body *d_n_bodies;
     Body *d_m_bodies;
 
+    clock_t start = clock();
     checkCudaErrors(cudaMalloc((void **) &d_n_bodies, num_n_bodies * sizeof(Body)));
     checkCudaErrors(cudaMalloc((void **) &d_m_bodies, num_m_bodies * sizeof(Body)));
     checkCudaErrors(cudaMemcpy(d_n_bodies,
@@ -241,14 +242,15 @@ void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodi
 
     int nBlocks = (num_n_bodies + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    clock_t start = clock();
     nBodyAcceleration<<<nBlocks, BLOCK_SIZE>>>(d_n_bodies, num_n_bodies, d_m_bodies, num_m_bodies, threadId);
-    clock_t end = clock() ;
-    double elapsed_time = (end-start)/(double)CLOCKS_PER_SEC ;
-    printf("Cuda + MPI (%d Bodies) Thread %d time = %f\n", NUM_ROCKETS, threadId, elapsed_time);
 
     checkCudaErrors(cudaFree(d_n_bodies));
     checkCudaErrors(cudaFree(d_m_bodies));
+
+    clock_t end = clock() ;
+    double elapsed_time = (end-start)/(double)CLOCKS_PER_SEC ;
+    printf("Cuda + MPI Steps %d for %d Bodies Thread %d time = %f\n", NUM_STEPS, NUM_ROCKETS, threadId, elapsed_time);
+
     checkCudaErrors(cudaDeviceSynchronize());
     cudaDeviceReset();
   }
