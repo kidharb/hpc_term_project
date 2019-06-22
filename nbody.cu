@@ -26,9 +26,7 @@ __global__ void nBodyAcceleration(Body n_bodies[],
 				  int num_n_bodies,
 				  Body m_bodies[],
 				  int num_m_bodies,
-                                  int mpi_threadId,
-                                  long start_step,
-                              	  long stop_step)
+                                  int mpi_threadId)
 {
   Force myForce;
   double dx, dy, d, f, theta;
@@ -41,34 +39,68 @@ __global__ void nBodyAcceleration(Body n_bodies[],
   double totalFy = 0;
 
   
-  for (long i = start_step; i < stop_step; i++)
+  for (long i = 0; i < NUM_STEPS; i++)
   {
+    /* Update planet position */
     for (int bodyIindex = 0; bodyIindex < num_m_bodies; bodyIindex++)
     {
-      /* Do not calculate attraction to myself */
-      if ((myid == bodyIindex) && (num_n_bodies == num_m_bodies))
-        continue;
+      for (int planetid = 0; planetid < num_m_bodies; planetid++)
+      {
+        /* Do not calculate attraction to myself */
+        if (planetid == bodyIindex)
+          continue;
   
-      dx = (n_bodies[bodyIindex].px-m_bodies[myid].px);
-      dy = (n_bodies[bodyIindex].py-m_bodies[myid].py);
-      d = sqrt(dx*dx + dy*dy);
-      f = G * n_bodies[bodyIindex].mass * m_bodies[myid].mass / (d*d);
+        dx = (m_bodies[bodyIindex].px-m_bodies[planetid].px);
+        dy = (m_bodies[bodyIindex].py-m_bodies[planetid].py);
+        d = sqrt(dx*dx + dy*dy);
+        f = G * m_bodies[bodyIindex].mass * m_bodies[planetid].mass / (d*d);
     
-      theta = atan2(dy, dx);
-      myForce.fx = cos(theta) * f;
-      myForce.fy = sin(theta) * f;
-      /*printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);*/
+        theta = atan2(dy, dx);
+        myForce.fx = cos(theta) * f;
+        myForce.fy = sin(theta) * f;
     
-      totalFx += myForce.fx;
-      totalFy += myForce.fy;
-      /*printf("[%s %s] Total fx, Total fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, totalFx, totalFy);*/
+        totalFx += myForce.fx;
+        totalFy += myForce.fy;
+      }
+    
+      /* Use one thread to do the updates */
+      m_bodies[bodyIindex].vx += totalFx / m_bodies[bodyIindex].mass * TIMESTEP;
+      m_bodies[bodyIindex].vy += totalFy / m_bodies[bodyIindex].mass * TIMESTEP;
+      m_bodies[bodyIindex].px += m_bodies[bodyIindex].vx * TIMESTEP;
+      m_bodies[bodyIindex].py += m_bodies[bodyIindex].vy * TIMESTEP;
+    } /* end planet updates */
+
+    /* this handles launching rockets based on mpi_threadId */ 
+    if (i > mpi_threadId)
+    { 
+      /* start body updates based on updated planet positions */
+      for (int bodyIindex = 0; bodyIindex < num_m_bodies; bodyIindex++)
+      {
+        /* Do not calculate attraction to myself */
+        if ((myid == bodyIindex) && (num_n_bodies == num_m_bodies))
+          continue;
+  
+        dx = (n_bodies[bodyIindex].px-m_bodies[myid].px);
+        dy = (n_bodies[bodyIindex].py-m_bodies[myid].py);
+        d = sqrt(dx*dx + dy*dy);
+        f = G * n_bodies[bodyIindex].mass * m_bodies[myid].mass / (d*d);
+      
+        theta = atan2(dy, dx);
+        myForce.fx = cos(theta) * f;
+        myForce.fy = sin(theta) * f;
+        /*printf("[%s : %s] partial fx, partial fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, myForce.fx, myForce.fy);*/
+      
+        totalFx += myForce.fx;
+        totalFy += myForce.fy;
+        /*printf("[%s %s] Total fx, Total fy = [%e, %e]\n",bodies[bodyIindex].name, bodies[myid].name, totalFx, totalFy);*/
+      }
+      
+      /* Use one thread to do the updates */
+      n_bodies[tid].vx += totalFx / n_bodies[tid].mass * TIMESTEP;
+      n_bodies[tid].vy += totalFy / n_bodies[tid].mass * TIMESTEP;
+      n_bodies[tid].px += n_bodies[tid].vx * TIMESTEP;
+      n_bodies[tid].py += n_bodies[tid].vy * TIMESTEP;
     }
-    
-    /* Use one thread to do the updates */
-    n_bodies[tid].vx += totalFx / n_bodies[tid].mass * TIMESTEP;
-    n_bodies[tid].vy += totalFy / n_bodies[tid].mass * TIMESTEP;
-    n_bodies[tid].px += n_bodies[tid].vx * TIMESTEP;
-    n_bodies[tid].py += n_bodies[tid].vy * TIMESTEP;
   }
 }
 
@@ -145,7 +177,7 @@ int compareResults(float * serialData, float * parallelData, unsigned long size)
 void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodies, int threadId)
 {
 
-#if (1)//def SERIAL
+#if (0)//def SERIAL
     long start_step = 0;
     long stop_step  = 8 * STEPS_PER_THREAD;
     clock_t start2 = clock();
@@ -170,11 +202,8 @@ void nbody_cuda(Body *n_bodies, int num_n_bodies, Body *m_bodies, int num_m_bodi
 
     int nBlocks = (num_n_bodies + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    long start_step = threadId * STEPS_PER_THREAD;
-    long stop_step  = start_step + STEPS_PER_THREAD;
-    printf("Workload for thread %d, step %ld till %ld\n",threadId, start_step, stop_step);
     clock_t start2 = clock();
-    nBodyAcceleration<<<nBlocks, BLOCK_SIZE>>>(d_n_bodies, num_n_bodies, d_m_bodies, num_m_bodies, threadId, start_step, stop_step);
+    nBodyAcceleration<<<nBlocks, BLOCK_SIZE>>>(d_n_bodies, num_n_bodies, d_m_bodies, num_m_bodies, threadId);
     clock_t end2 = clock() ;
     double elapsed_time = (end2-start2)/(double)CLOCKS_PER_SEC ;
     printf("Cuda + MPI (%d Bodies) Thread %d time = %f\n", NUM_ROCKETS, threadId, elapsed_time);
