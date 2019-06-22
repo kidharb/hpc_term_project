@@ -45,33 +45,71 @@ void nbody_init_rockets(Body *bodies)
 }
 void nbody_init_planets(Body *bodies)
 {
-    Body earth, sun, venus;
+    Body earth, sun, mercury, venus, mars, jupiter, saturn, neptune, uranus;
 
-    //sprintf(sun.name, "%s", "sun");
     sun.mass = 1.98892 * pow(10,30);
-    /*sun.mass = 1.98892 * pow(10,24);*/
     sun.px = 0;
     sun.py = 0;
     sun.vx = 0;
     sun.vy = 0;
 
-    //sprintf(earth.name, "%s", "earth");
+    mercury.mass = 3.3 * pow(10,23);
+    mercury.px = 0.39 * AU;
+    mercury.py = 0;
+    mercury.vx = 0;
+    mercury.vy = 47.36 * 1000;
+
     earth.mass = 5.9742 * pow(10,24);
     earth.px = -1*AU;
     earth.py = 0;
     earth.vx = 0;
     earth.vy = 29.783*1000;            // 29.783 km/sec
 
-    //sprintf(venus.name, "%s", "venus");
     venus.mass = 4.8685 * pow(10,24);
     venus.px = 0.723 * AU;
     venus.py = 0;
     venus.vx = 0;
     venus.vy = -35.02 * 1000;
 
+    mars.mass = 6.39 * pow(10,23);
+    mars.px = 1.524 * AU;
+    mars.py = 0;
+    mars.vx = 0;
+    mars.vy = 24.07 * 1000;
+
+    jupiter.mass = 1.9 * pow(10,27);
+    jupiter.px = 5.23 * AU;
+    jupiter.py = 0;
+    jupiter.vx = 0;
+    jupiter.vy = 13.06 * 1000;
+
+    saturn.mass = 5.69 * pow(10,26);
+    saturn.px = 9.539 * AU;
+    saturn.py = 0;
+    saturn.vx = 0;
+    saturn.vy = 9.68 * 1000;
+
+    uranus.mass = 8,68 * pow(10,25);
+    uranus.px = 19.18 * AU;
+    uranus.py = 0;
+    uranus.vx = 0;
+    uranus.vy = -6.80 * 1000;
+
+    neptune.mass = 1.02 * pow(10,26);
+    neptune.px = 30.06 * AU;
+    neptune.py = 0;
+    neptune.vx = 0;
+    neptune.vy = 5.43 * 1000;
+
     memcpy(&bodies[0], &sun, sizeof(Body));
-    memcpy(&bodies[1], &earth, sizeof(Body));
+    memcpy(&bodies[1], &mercury, sizeof(Body));
     memcpy(&bodies[2], &venus, sizeof(Body));
+    memcpy(&bodies[3], &earth, sizeof(Body));
+    memcpy(&bodies[4], &mars, sizeof(Body));
+    memcpy(&bodies[5], &jupiter, sizeof(Body));
+    memcpy(&bodies[6], &saturn, sizeof(Body));
+    memcpy(&bodies[7], &uranus, sizeof(Body));
+    memcpy(&bodies[8], &neptune, sizeof(Body));
 }
 
 int main(int argc, char** argv) {

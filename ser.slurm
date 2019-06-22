@@ -8,7 +8,7 @@
 # specify memory pool for all cores
 ##SBATCH --mem 1000
 # specify the wall clock time limit for the job
-#SBATCH -t 01:00:00
+#SBATCH -t 12:00:00
 # specify the job name
 #SBATCH -J kids-hpc-job
 # specify the filename to be used for writing output

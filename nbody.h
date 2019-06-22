@@ -7,11 +7,11 @@
 #define G 6.67428e-11
 #define AU  (149.6e6 * 1000)     // 149.6 million km, in meters.
 #define SCALE  (250 / AU)
-#define NUM_PLANETS 3
+#define NUM_PLANETS 9
 #define NUM_ROCKETS 30000
 #define TIMESTEP 24*3600
 #define NUM_TYPES 6
-#define NUM_STEPS 100000
+#define NUM_STEPS 1000000
 #define BLOCK_SIZE 256
 
 typedef struct {
