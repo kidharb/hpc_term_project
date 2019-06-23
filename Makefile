@@ -2,15 +2,16 @@ INC="./common/inc"
 NVCCFLAGS=-I$(INC) -m64
 OMPFLAG=-fopenmp
 NVCC=nvcc
-MPICC=mpicc
+MPICC=mpic++
 CCFLAGS=-g -c
-LDFLAGS=-L/usr/local/cuda/lib -lcudart
+LDFLAGS=-L/usr/local/cuda/lib64 -lcudart -lcuda
 
+#cluster: nbody_mpi.o
 
 all: nbody
 
 nbody: nbody.o nbody_mpi.o
-	$(MPICC) $(LDFLAGS) nbody.o nbody_mpi.o -o nbody
+	$(MPICC) nbody.o nbody_mpi.o -o nbody $(LDFLAGS)
 
 nbody.o: nbody.cu
 	$(NVCC) $(NVCCFLAGS) $(CCFLAGS) nbody.cu -o nbody.o

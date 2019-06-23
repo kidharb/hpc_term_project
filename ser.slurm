@@ -2,20 +2,22 @@
 # specify a partition
 #SBATCH -p ha
 # specify number of nodes
-#SBATCH -N 4
+#SBATCH -N 1
 # specify number of cores
-#SBATCH -n 8
+#SBATCH --ntasks=1
 # specify memory pool for all cores
-##SBATCH --mem 1
+##SBATCH --mem 1000
 # specify the wall clock time limit for the job
-#SBATCH -t 00:5:00
+#SBATCH -t 12:00:00
 # specify the job name
-#SBATCH -J test-job
+#SBATCH -J kids-hpc-job
 # specify the filename to be used for writing output
 # NOTE: You must replace the username `hwang' with your own account name!!
-#SBATCH -o /home-mscluster/hwang/HPC2019/mpi_lab2/slurm.%N.%j.out
+#SBATCH -o /home-mscluster/kbachan/hpc_term_project/slurm_%N.out
 # specify the filename for stderr
-#SBATCH -e /home-mscluster/hwang/HPC2019/mpi_lab2/slurm.%N.%j.err
+#SBATCH -e /home-mscluster/kbachan/hpc_term_project/slurm_%N.err
+# Just one MPI task per node
+#SBATCH --ntasks-per-node=1 ### Number of tasks (MPI processes)
 
 echo ------------------------------------------------------
 echo -n 'Job is running on node ' $SLURM_JOB_NODELIST
@@ -28,8 +30,4 @@ echo SLURM: number of cores is $SLURM_NTASKS
 echo SLURM: job name is $SLURM_JOB_NAME
 echo ------------------------------------------------------
 cd $SLURM_SUBMIT_DIR
-#make clean
-#make
-mpicc -o mpi_mat_vect_mult mpi_mat_vect_mult.c
-mpiexec -n 8 ./mpi_mat_vect_mult 64 64
-
+mpirun ./nbody serial
